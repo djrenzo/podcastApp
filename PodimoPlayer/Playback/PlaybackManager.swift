@@ -111,9 +111,15 @@ final class PlaybackManager: @unchecked Sendable {
             guard let (data, _) = try? await URLSession.shared.data(from: imageUrl),
                   let image = UIImage(data: data),
                   !Task.isCancelled else { return }
-            await MainActor.run {
+            // Built outside any MainActor context: MediaPlayer calls this
+            // requestHandler from its own background queue whenever it wants
+            // to render the artwork, and a closure formed inside `MainActor.run`
+            // gets inferred as MainActor-isolated — tripping the same
+            // dispatch_assert_queue crash as the remote-command handlers did.
+            let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+            DispatchQueue.main.async {
                 guard let self, self.currentEpisode?.id == episode.id else { return }
-                self.artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                self.artwork = artwork
                 self.updateNowPlayingInfo()
             }
         }
