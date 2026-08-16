@@ -1,6 +1,8 @@
 import SwiftUI
 
-private let artworkCache = NSCache<NSString, UIImage>()
+// NSCache is documented by Apple as thread-safe for concurrent access, so this
+// is safe despite not being provably Sendable to the compiler.
+private nonisolated(unsafe) let artworkCache = NSCache<NSString, UIImage>()
 
 struct RemoteArtwork: View {
     let urlString: String?
