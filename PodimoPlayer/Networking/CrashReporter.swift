@@ -6,17 +6,20 @@ import Darwin
 // value computed once up front — nothing is captured or allocated at crash time
 // beyond what backtrace_symbols_fd itself needs.
 
-private let exceptionLogPath: UnsafeMutablePointer<CChar> = strdup(
+// Written once at startup, then only ever read (from a signal handler, which
+// isn't part of Swift's concurrency model to begin with) — safe by
+// construction, so opt these globals out of Sendable checking explicitly.
+private nonisolated(unsafe) let exceptionLogPath: UnsafeMutablePointer<CChar> = strdup(
     (NSTemporaryDirectory() as NSString).appendingPathComponent("podimo_exception_crash.log")
 )
-private let signalLogPath: UnsafeMutablePointer<CChar> = strdup(
+private nonisolated(unsafe) let signalLogPath: UnsafeMutablePointer<CChar> = strdup(
     (NSTemporaryDirectory() as NSString).appendingPathComponent("podimo_signal_crash.log")
 )
 
 // Pre-allocated once, well before any crash, so the signal handler never has
 // to allocate memory itself (unsafe if the crash happened inside malloc).
 private let backtraceCapacity = 128
-private let backtraceBuffer = UnsafeMutablePointer<UnsafeMutableRawPointer?>.allocate(capacity: backtraceCapacity)
+private nonisolated(unsafe) let backtraceBuffer = UnsafeMutablePointer<UnsafeMutableRawPointer?>.allocate(capacity: backtraceCapacity)
 
 private func handleUncaughtException(_ exception: NSException) {
     let text = """
