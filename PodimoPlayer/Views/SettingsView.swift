@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @State private var credentials = CredentialsStore.shared
     @State private var debugLog = DebugLogStore.shared
+    @State private var crashLog = CrashLogStore.shared
     @State private var isTesting = false
     @State private var testResult: String?
     @State private var testSucceeded = false
@@ -52,6 +53,14 @@ struct SettingsView: View {
                         DebugLogView()
                     }
                     Text("Logs every GraphQL request and response, including headers and bodies, to help diagnose errors like a 404.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    Toggle("Enable crash logging", isOn: $crashLog.isEnabled)
+                    NavigationLink("View Crash Log") {
+                        CrashLogView()
+                    }
+                    Text("Captures the stack trace from a crash and shows it here the next time you open the app.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
