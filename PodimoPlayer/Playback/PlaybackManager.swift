@@ -148,38 +148,58 @@ final class PlaybackManager: @unchecked Sendable {
         NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
     }
 
+    // MPRemoteCommandCenter invokes these on its own background queue, not
+    // necessarily the main thread/actor — hop explicitly rather than relying
+    // on an implicit guarantee, which was crashing (dispatch_assert_queue trap
+    // inside the Swift concurrency runtime when mutating state off-main).
     private func configureRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
         center.playCommand.addTarget { [weak self] _ in
-            self?.player?.play()
-            self?.isPlaying = true
+            DispatchQueue.main.async {
+                self?.player?.play()
+                self?.isPlaying = true
+            }
             return .success
         }
         center.pauseCommand.addTarget { [weak self] _ in
-            self?.player?.pause()
-            self?.isPlaying = false
+            DispatchQueue.main.async {
+                self?.player?.pause()
+                self?.isPlaying = false
+            }
             return .success
         }
         center.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
-            self?.seek(to: event.positionTime)
+            DispatchQueue.main.async {
+                self?.seek(to: event.positionTime)
+            }
             return .success
         }
         center.skipForwardCommand.preferredIntervals = [30]
         center.skipForwardCommand.addTarget { [weak self] _ in
-            guard let self else { return .commandFailed }
-            self.seek(to: self.currentTime + 30)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.seek(to: self.currentTime + 30)
+            }
             return .success
         }
         center.skipBackwardCommand.preferredIntervals = [15]
         center.skipBackwardCommand.addTarget { [weak self] _ in
-            guard let self else { return .commandFailed }
-            self.seek(to: max(0, self.currentTime - 15))
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.seek(to: max(0, self.currentTime - 15))
+            }
             return .success
         }
     }
 
     private func updateNowPlayingInfo(timeOnly: Bool = false) {
+        // Backstop: MPNowPlayingInfoCenter's setter is main-thread sensitive,
+        // and this function is reachable from the remote-command handlers above.
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.updateNowPlayingInfo(timeOnly: timeOnly) }
+            return
+        }
         guard let episode = currentEpisode else { return }
         var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
         // Title is recomputed on every tick (not just timeOnly: false) so an
