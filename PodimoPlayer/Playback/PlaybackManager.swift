@@ -170,8 +170,9 @@ final class PlaybackManager: @unchecked Sendable {
         }
         center.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let event = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            let positionTime = event.positionTime
             DispatchQueue.main.async {
-                self?.seek(to: event.positionTime)
+                self?.seek(to: positionTime)
             }
             return .success
         }
