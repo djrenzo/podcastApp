@@ -52,4 +52,30 @@ final class PlaybackCoordinator: @unchecked Sendable {
         errorMessage = nil
         PlaybackManager.shared.play(episode: episode, audioURL: url, videoURL: episode.hasVideo ? url : nil)
     }
+
+    /// Audiobooks are represented as an Episode (for reuse in EpisodeRow /
+    /// Keep Listening), but they don't have a podcast-episode media URL to
+    /// resolve — `play(episode:)`'s query would just 404. They already have a
+    /// direct, if short-lived, audio URL from the audiobook channel query instead.
+    func playAudiobook(episode: Episode) {
+        errorMessage = nil
+        isResolving = true
+        Task {
+            do {
+                let result = try await PodimoAPI.shared.getAudiobookChannel(audiobookId: episode.id)
+                guard let urlString = result.audiobook.playableURLString, let url = URL(string: urlString) else {
+                    throw PodimoError.badResponse
+                }
+                await MainActor.run {
+                    self.isResolving = false
+                    PlaybackManager.shared.play(episode: episode, audioURL: url)
+                }
+            } catch {
+                await MainActor.run {
+                    self.isResolving = false
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
 }

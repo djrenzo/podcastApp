@@ -1,11 +1,9 @@
 import SwiftUI
-import AVKit
 
 struct RootTabView: View {
     @State private var coordinator = PlaybackCoordinator.shared
     @State private var playback = PlaybackManager.shared
     @State private var showNowPlaying = false
-    @State private var showVideoPlayer = false
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -20,54 +18,24 @@ struct RootTabView: View {
             .tint(Color.podimoPurple)
 
             if playback.currentEpisode != nil {
-                MiniPlayerBar(onTap: handleMiniPlayerTap)
+                MiniPlayerBar(onTap: { showNowPlaying = true })
                     .padding(.bottom, 49)
             }
         }
-        .sheet(isPresented: $showNowPlaying) {
-            NowPlayingView()
-        }
-        .fullScreenCover(isPresented: $showVideoPlayer, onDismiss: {
+        // A regular sheet (unlike fullScreenCover) supports swipe-to-dismiss,
+        // and now hosts video inline instead of a separate full-screen cover —
+        // collapse back to the audio-only rendition whenever it closes, however
+        // that happens (swipe or otherwise).
+        .sheet(isPresented: $showNowPlaying, onDismiss: {
             playback.collapseToAudioOnly()
         }) {
-            VideoPlayerScreen()
+            NowPlayingView()
         }
         .alert("Couldn't play episode", isPresented: .constant(coordinator.errorMessage != nil), actions: {
             Button("OK") { coordinator.errorMessage = nil }
         }, message: {
             Text(coordinator.errorMessage ?? "")
         })
-    }
-
-    private func handleMiniPlayerTap() {
-        if playback.videoStreamURL != nil {
-            playback.expandToVideo()
-            showVideoPlayer = true
-        } else {
-            showNowPlaying = true
-        }
-    }
-}
-
-private struct VideoPlayerScreen: View {
-    @State private var playback = PlaybackManager.shared
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        Group {
-            if let player = playback.player {
-                VideoPlayer(player: player)
-                    .ignoresSafeArea()
-                    .overlay(alignment: .topTrailing) {
-                        Button(action: { dismiss() }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title)
-                                .foregroundStyle(.white, .black.opacity(0.6))
-                                .padding()
-                        }
-                    }
-            }
-        }
     }
 }
 

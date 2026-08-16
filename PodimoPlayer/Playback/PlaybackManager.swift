@@ -20,16 +20,39 @@ final class PlaybackManager: @unchecked Sendable {
     private(set) var videoStreamURL: URL?
     private(set) var isVideoActive = false
 
+    static let availableRates: [Float] = [1.0, 1.5, 2.0]
+    private(set) var playbackRate: Float = 1.0
+
     var errorMessage: String?
 
     private var timeObserver: Any?
     private var lastProgressPersist: Date = .distantPast
     private var artwork: MPMediaItemArtwork?
     private var artworkTask: Task<Void, Never>?
+    private let rateKey = "podimo_playback_rate"
 
     private init() {
+        let storedRate = UserDefaults.standard.float(forKey: rateKey)
+        playbackRate = Self.availableRates.contains(storedRate) ? storedRate : 1.0
         configureAudioSession()
         configureRemoteCommands()
+    }
+
+    /// Applies to audio, video, and audiobook playback alike — they're all
+    /// just the one shared AVPlayer underneath.
+    func setPlaybackRate(_ rate: Float) {
+        playbackRate = rate
+        UserDefaults.standard.set(rate, forKey: rateKey)
+        if isPlaying {
+            player?.rate = rate
+        }
+        updateNowPlayingInfo()
+    }
+
+    func cyclePlaybackRate() {
+        let rates = Self.availableRates
+        let currentIndex = rates.firstIndex(of: playbackRate) ?? 0
+        setPlaybackRate(rates[(currentIndex + 1) % rates.count])
     }
 
     private func configureAudioSession() {
@@ -54,13 +77,23 @@ final class PlaybackManager: @unchecked Sendable {
     func expandToVideo() {
         guard let videoStreamURL, !isVideoActive else { return }
         isVideoActive = true
-        loadItem(url: videoStreamURL, resumeTime: currentTime, autoplay: isPlaying)
+        loadItem(url: videoStreamURL, resumeTime: currentTime, autoplay: isActuallyPlaying)
     }
 
     func collapseToAudioOnly() {
         guard let audioURL, isVideoActive else { return }
         isVideoActive = false
-        loadItem(url: audioURL, resumeTime: currentTime, autoplay: isPlaying)
+        loadItem(url: audioURL, resumeTime: currentTime, autoplay: isActuallyPlaying)
+    }
+
+    /// The full-screen video player uses AVKit's native controls, which pause/
+    /// resume the AVPlayer directly without going through `togglePlayPause()` —
+    /// so `isPlaying` can go stale while video is showing. Read the player's
+    /// actual rate instead of trusting the cached flag when it matters (e.g.
+    /// deciding whether to autoplay after swapping between audio and video).
+    private var isActuallyPlaying: Bool {
+        guard let player else { return false }
+        return player.rate != 0 && player.error == nil
     }
 
     func togglePlayPause() {
@@ -68,7 +101,9 @@ final class PlaybackManager: @unchecked Sendable {
         if isPlaying {
             player.pause()
         } else {
-            player.play()
+            // Setting rate directly (rather than play(), which always resets
+            // to 1.0) is how AVPlayer starts/resumes playback at a custom speed.
+            player.rate = playbackRate
         }
         isPlaying.toggle()
         updateNowPlayingInfo()
@@ -98,7 +133,7 @@ final class PlaybackManager: @unchecked Sendable {
             newPlayer.seek(to: CMTime(seconds: resumeTime, preferredTimescale: 600))
         }
         if autoplay {
-            newPlayer.play()
+            newPlayer.rate = playbackRate
         }
         isPlaying = autoplay
         updateNowPlayingInfo()
@@ -132,6 +167,9 @@ final class PlaybackManager: @unchecked Sendable {
             if let seconds = player.currentItem?.duration.seconds, seconds.isFinite {
                 self.duration = seconds
             }
+            // Keeps isPlaying accurate even when AVKit's native video controls
+            // pause/resume the player directly, bypassing togglePlayPause().
+            self.isPlaying = player.rate != 0
             self.updateNowPlayingInfo(timeOnly: true)
             self.persistProgressIfNeeded()
         }
@@ -162,8 +200,9 @@ final class PlaybackManager: @unchecked Sendable {
         let center = MPRemoteCommandCenter.shared()
         center.playCommand.addTarget { [weak self] _ in
             DispatchQueue.main.async {
-                self?.player?.play()
-                self?.isPlaying = true
+                guard let self else { return }
+                self.player?.rate = self.playbackRate
+                self.isPlaying = true
             }
             return .success
         }
@@ -220,7 +259,7 @@ final class PlaybackManager: @unchecked Sendable {
         }
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         info[MPMediaItemPropertyPlaybackDuration] = duration
-        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
+        info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? Double(playbackRate) : 0.0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 

@@ -107,7 +107,7 @@ struct AudiobookDetailView: View {
         if let duration = detail.duration, duration > 0 { parts.append(formattedDuration(duration)) }
         if let percentage = detail.rating?.likedPercentage { parts.append("\(percentage)% liked") }
         if !chapters.isEmpty { parts.append("\(chapters.count) chapters") }
-        return parts.joined(separator: " Β· ")
+        return parts.joined(separator: " • ")
     }
 
     private func formattedDuration(_ seconds: Double) -> String {

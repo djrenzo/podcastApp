@@ -1,8 +1,11 @@
 import SwiftUI
+import AVKit
 
 struct NowPlayingView: View {
     @State private var playback = PlaybackManager.shared
     @State private var showChapters = false
+    @State private var isScrubbing = false
+    @State private var scrubTime: Double = 0
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -10,9 +13,7 @@ struct NowPlayingView: View {
             Capsule().fill(.secondary.opacity(0.3)).frame(width: 40, height: 5).padding(.top, 8)
 
             if let episode = playback.currentEpisode {
-                RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 28)
-                    .frame(width: 260, height: 260)
-                    .shadow(color: Color.podimoPurple.opacity(0.3), radius: 24, y: 12)
+                artworkOrVideo(for: episode)
 
                 VStack(spacing: 6) {
                     Text(episode.title).font(.title3.bold()).multilineTextAlignment(.center).lineLimit(2)
@@ -50,16 +51,71 @@ struct NowPlayingView: View {
         }
     }
 
+    /// Shows the video inline, in the same slot the artwork occupies for
+    /// audio episodes, rather than a separate full-screen cover. Video
+    /// episodes still start audio-only — tapping the toggle is what actually
+    /// swaps in the (heavier) video rendition via PlaybackManager.
+    @ViewBuilder
+    private func artworkOrVideo(for episode: Episode) -> some View {
+        ZStack(alignment: .topTrailing) {
+            if playback.isVideoActive, let player = playback.player {
+                VideoPlayer(player: player)
+                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                    .frame(maxWidth: 320)
+                    .clipShape(RoundedRectangle(cornerRadius: 28))
+            } else {
+                RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 28)
+                    .frame(width: 260, height: 260)
+            }
+            if playback.videoStreamURL != nil {
+                Button {
+                    if playback.isVideoActive {
+                        playback.collapseToAudioOnly()
+                    } else {
+                        playback.expandToVideo()
+                    }
+                } label: {
+                    Image(systemName: playback.isVideoActive ? "headphones" : "video.fill")
+                        .font(.title3)
+                        .foregroundStyle(.white)
+                        .padding(10)
+                        .background(.black.opacity(0.55), in: Circle())
+                }
+                .padding(10)
+            }
+        }
+        .shadow(color: Color.podimoPurple.opacity(0.3), radius: 24, y: 12)
+    }
+
     private var progressSection: some View {
         VStack(spacing: 6) {
-            Slider(value: Binding(
-                get: { playback.currentTime },
-                set: { playback.seek(to: $0) }
-            ), in: 0...max(playback.duration, 1))
+            // Seeking on every drag tick fights the periodic time observer
+            // (which keeps overwriting currentTime from the actual, laggier
+            // player position mid-seek), reading as a jumpy thumb instead of a
+            // smooth glide. Track the finger locally while dragging and only
+            // commit a single real seek once the gesture ends.
+            Slider(
+                value: Binding(
+                    get: { isScrubbing ? scrubTime : playback.currentTime },
+                    set: { scrubTime = $0 }
+                ),
+                in: 0...max(playback.duration, 1),
+                onEditingChanged: { editing in
+                    if editing {
+                        scrubTime = playback.currentTime
+                        isScrubbing = true
+                    } else {
+                        playback.seek(to: scrubTime)
+                        isScrubbing = false
+                    }
+                }
+            )
             .tint(Color.podimoPurple)
 
             HStack {
-                Text(format(playback.currentTime))
+                Text(format(isScrubbing ? scrubTime : playback.currentTime))
+                Spacer()
+                speedButton
                 Spacer()
                 Text(format(playback.duration))
             }
@@ -67,6 +123,25 @@ struct NowPlayingView: View {
             .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 32)
+    }
+
+    /// Cycles 1x → 1.5x → 2x → 1x. Applies to whatever's currently loaded —
+    /// audio episode, audiobook, or video — since they all share one AVPlayer.
+    private var speedButton: some View {
+        Button {
+            playback.cyclePlaybackRate()
+        } label: {
+            Text(speedLabel(playback.playbackRate))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.podimoPurple)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(Color.podimoCard, in: Capsule())
+        }
+    }
+
+    private func speedLabel(_ rate: Float) -> String {
+        rate == rate.rounded() ? "\(Int(rate))x" : "\(rate)x"
     }
 
     private func chapterBar(for episode: Episode) -> some View {

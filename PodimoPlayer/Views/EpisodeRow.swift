@@ -26,19 +26,37 @@ struct EpisodeRow: View {
     }
 
     private var isCompleted: Bool {
-        episode.isMarkedAsPlayed || (effectiveProgress?.progress ?? 0) >= 0.95
+        episode.isMarkedAsPlayed
+            || progressStore.isCompleted(episodeId: episode.id)
+            || (effectiveProgress?.progress ?? 0) >= 0.95
+    }
+
+    /// For audiobooks (only ever shown here via Keep Listening), lead with
+    /// the chapter last listened to — same "<chapter> • <book>" shape as the
+    /// Now Playing title — falling back to just the book title if there's no
+    /// chapter data or no listening position yet.
+    private var titleText: String {
+        guard episode.isAudiobook,
+              let chapter = episode.chapter(at: effectiveProgress?.listenTime ?? 0) else {
+            return episode.title
+        }
+        return "\(chapter.title) • \(episode.title)"
     }
 
     var body: some View {
         Button {
-            coordinator.play(episode: playableEpisode)
+            if episode.isAudiobook {
+                coordinator.playAudiobook(episode: playableEpisode)
+            } else {
+                coordinator.play(episode: playableEpisode)
+            }
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 12)
                     .frame(width: 64, height: 64)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(episode.title)
+                    Text(titleText)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(Color.podimoInk)
                         .lineLimit(2)
@@ -68,7 +86,9 @@ struct EpisodeRow: View {
                 }
 
                 Spacer(minLength: 4)
-                downloadButton
+                if !episode.isAudiobook {
+                    downloadButton
+                }
             }
             .padding(12)
             .background(Color.podimoCard, in: RoundedRectangle(cornerRadius: 18))
@@ -82,7 +102,7 @@ struct EpisodeRow: View {
         if let date = episode.publishedDate {
             parts.append(date.formatted(date: .abbreviated, time: .omitted))
         }
-        return parts.joined(separator: " Β· ")
+        return parts.joined(separator: " • ")
     }
 
     @ViewBuilder

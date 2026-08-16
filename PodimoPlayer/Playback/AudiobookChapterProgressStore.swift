@@ -19,11 +19,23 @@ final class AudiobookChapterProgressStore: @unchecked Sendable {
     }
 
     func toggle(episodeId: String, sequence: Int) {
+        setCompleted(!isManuallyCompleted(episodeId: episodeId, sequence: sequence), episodeId: episodeId, sequence: sequence)
+    }
+
+    /// Explicit "mark as done" (e.g. a swipe action) — unlike `toggle`, this
+    /// is idempotent rather than flipping an already-done chapter back off.
+    func markCompleted(episodeId: String, sequence: Int) {
+        setCompleted(true, episodeId: episodeId, sequence: sequence)
+    }
+
+    private func setCompleted(_ completed: Bool, episodeId: String, sequence: Int) {
         var sequences = completedByEpisode[episodeId] ?? []
-        if sequences.contains(sequence) {
-            sequences.remove(sequence)
-        } else {
+        if completed {
+            guard !sequences.contains(sequence) else { return }
             sequences.insert(sequence)
+        } else {
+            guard sequences.contains(sequence) else { return }
+            sequences.remove(sequence)
         }
         completedByEpisode[episodeId] = sequences
         persist()
