@@ -119,8 +119,10 @@ final class PodimoAPI: @unchecked Sendable {
     }
 
     func getEpisodeURL(podcastId: String, episodeId: String) async throws -> String {
-        let data = try await perform(operationName: "ShortLivedPodcastMediaUrlQuery", query: GraphQLQueries.mediaURL, variables: ["podcastId": podcastId, "episodeId": episodeId])
-        guard let media = data["podcastEpisodeStreamMediaById"] as? [String: Any], let url = media["url"] as? String else {
+        let data = try await perform(operationName: "PlaybackByPodcastEpisodeQuery", query: GraphQLQueries.mediaURL, variables: ["podcastId": podcastId, "episodeId": episodeId])
+        guard let playback = data["playbackByPodcastEpisode"] as? [String: Any],
+              let track = playback["track"] as? [String: Any],
+              let url = track["url"] as? String else {
             throw PodimoError.badResponse
         }
         return url

@@ -38,11 +38,23 @@ enum GraphQLQueries {
     """
 
     static let mediaURL = """
-    query ShortLivedPodcastMediaUrlQuery($podcastId: String!, $episodeId: String!) {
-        podcastEpisodeStreamMediaById(podcastId: $podcastId, episodeId: $episodeId) {
+    query PlaybackByPodcastEpisodeQuery($podcastId: ID!, $episodeId: ID!) {
+      playbackByPodcastEpisode(podcastId: $podcastId, episodeId: $episodeId) {
+        duration
+        track {
+          __typename
+          ... on MediaTrack {
             url
             __typename
+          }
+          ... on VideoMediaTrack {
+            url
+            imageUrl
+            __typename
+          }
         }
+        __typename
+      }
     }
     """
 
