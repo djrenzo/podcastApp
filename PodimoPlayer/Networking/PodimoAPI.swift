@@ -20,7 +20,7 @@ final class PodimoAPI: @unchecked Sendable {
     static let shared = PodimoAPI()
     private let endpoint = URL(string: "https://open.podimo.com/graphql")!
 
-    private func perform(operationName: String, query: String, variables: [String: Any]) async throws -> [String: Any] {
+    private func perform(operationName: String, query: String, variables: [String: Any], extraHeaders: [String: String] = [:]) async throws -> [String: Any] {
         let creds = CredentialsStore.shared
         guard creds.hasCredentials else { throw PodimoError.missingCredentials }
 
@@ -36,6 +36,9 @@ final class PodimoAPI: @unchecked Sendable {
         request.setValue(creds.cookie, forHTTPHeaderField: "Cookie")
         request.setValue("https://open.podimo.com", forHTTPHeaderField: "Origin")
         request.setValue("https://open.podimo.com/", forHTTPHeaderField: "Referer")
+        for (field, value) in extraHeaders {
+            request.setValue(value, forHTTPHeaderField: field)
+        }
 
         let bodyData = try JSONSerialization.data(withJSONObject: [
             "operationName": operationName, "variables": variables, "query": query
@@ -119,7 +122,7 @@ final class PodimoAPI: @unchecked Sendable {
     }
 
     func getAudiobookChannel(audiobookId: String, limit: Int = 10, offset: Int = 0) async throws -> (audiobook: AudiobookDetail, youMightAlsoLike: [AudiobookSummary]) {
-        let data = try await perform(operationName: "AudiobookChannelQuery", query: GraphQLQueries.audiobookChannel, variables: ["audiobookId": audiobookId, "limit": limit, "offset": offset])
+        let data = try await perform(operationName: "AudiobookChannelQuery", query: GraphQLQueries.audiobookChannel, variables: ["audiobookId": audiobookId, "limit": limit, "offset": offset], extraHeaders: ["user-os": "ios"])
         guard let audiobookDict = data["audiobook"] as? [String: Any], let audiobook = AudiobookDetail(dict: audiobookDict) else {
             throw PodimoError.badResponse
         }
