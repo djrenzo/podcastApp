@@ -7,6 +7,7 @@ struct AudiobookDetailView: View {
 
     @State private var detail: AudiobookDetail?
     @State private var relatedBooks: [AudiobookSummary] = []
+    @State private var chapters: [AudiobookChapter] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var playback = PlaybackManager.shared
@@ -105,6 +106,7 @@ struct AudiobookDetailView: View {
         if let language = detail.language { parts.append(language) }
         if let duration = detail.duration, duration > 0 { parts.append(formattedDuration(duration)) }
         if let percentage = detail.rating?.likedPercentage { parts.append("\(percentage)% liked") }
+        if !chapters.isEmpty { parts.append("\(chapters.count) chapters") }
         return parts.joined(separator: " Β· ")
     }
 
@@ -120,25 +122,31 @@ struct AudiobookDetailView: View {
 
     private func play(_ detail: AudiobookDetail) {
         guard let urlString = detail.playableURLString, let url = URL(string: urlString) else { return }
-        guard let episode = Episode(dict: [
+        guard var episode = Episode(dict: [
             "id": detail.id,
             "podcastId": detail.id,
             "podcastName": detail.authorNames.joined(separator: ", "),
             "title": detail.title,
             "imageUrl": detail.imageUrl as Any,
             "hasVideo": false,
-            "duration": detail.duration as Any
+            "duration": detail.duration as Any,
+            "userProgress": ["listenTime": detail.userProgress?.listenTime as Any]
         ]) else { return }
-        PlaybackManager.shared.play(url: url, episode: episode)
+        episode.chapters = chapters
+        episode.isAudiobook = true
+        PlaybackManager.shared.play(episode: episode, audioURL: url)
     }
 
     private func load() async {
         isLoading = true
         errorMessage = nil
         do {
-            let result = try await PodimoAPI.shared.getAudiobookChannel(audiobookId: audiobookId)
+            async let channelTask = PodimoAPI.shared.getAudiobookChannel(audiobookId: audiobookId)
+            async let chaptersTask = PodimoAPI.shared.getAudiobookChapters(audiobookId: audiobookId)
+            let result = try await channelTask
             detail = result.audiobook
             relatedBooks = result.youMightAlsoLike
+            chapters = (try? await chaptersTask) ?? []
         } catch {
             errorMessage = error.localizedDescription
         }

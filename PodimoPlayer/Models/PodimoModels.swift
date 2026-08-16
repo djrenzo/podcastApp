@@ -5,6 +5,27 @@ struct EpisodeProgress: Equatable {
     var listenTime: Double?
 }
 
+struct AudiobookChapter: Identifiable, Equatable, Hashable, Codable {
+    let sequence: Int
+    let title: String
+    let duration: Double
+    let startTimestampInSeconds: Double
+
+    var id: Int { sequence }
+    var endTimestampInSeconds: Double { startTimestampInSeconds + duration }
+
+    init?(dict: [String: Any]) {
+        guard let sequence = dict["sequence"] as? Int,
+              let title = dict["title"] as? String,
+              let duration = dict["duration"] as? Double,
+              let start = dict["startTimestampInSeconds"] as? Double else { return nil }
+        self.sequence = sequence
+        self.title = title
+        self.duration = duration
+        self.startTimestampInSeconds = start
+    }
+}
+
 struct Episode: Identifiable, Equatable {
     let id: String
     let podcastId: String
@@ -17,6 +38,10 @@ struct Episode: Identifiable, Equatable {
     let isMarkedAsPlayed: Bool
     let hasVideo: Bool
     var userProgress: EpisodeProgress?
+    var chapters: [AudiobookChapter] = []
+    /// Audiobooks are represented as an Episode too (podcastName doubles as
+    /// the author string); this distinguishes how playback UI should label them.
+    var isAudiobook = false
 
     init?(dict: [String: Any]) {
         guard let id = dict["id"] as? String,
@@ -56,6 +81,19 @@ struct Episode: Identifiable, Equatable {
         guard let duration, duration > 0 else { return "" }
         let minutes = Int(duration) / 60
         return "\(minutes) min"
+    }
+
+    /// Where playback should resume, or nil if there's nothing worth resuming
+    /// (barely started, or already finished).
+    var resumeTime: Double? {
+        guard let listenTime = userProgress?.listenTime, listenTime > 5 else { return nil }
+        if let progress = userProgress?.progress, progress >= 0.95 { return nil }
+        if let duration, duration > 0, listenTime / duration >= 0.95 { return nil }
+        return listenTime
+    }
+
+    func chapter(at time: Double) -> AudiobookChapter? {
+        chapters.last { $0.startTimestampInSeconds <= time }
     }
 }
 

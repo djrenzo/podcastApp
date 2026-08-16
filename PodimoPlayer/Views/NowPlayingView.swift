@@ -2,10 +2,11 @@ import SwiftUI
 
 struct NowPlayingView: View {
     @State private var playback = PlaybackManager.shared
+    @State private var showChapters = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 24) {
             Capsule().fill(.secondary.opacity(0.3)).frame(width: 40, height: 5).padding(.top, 8)
 
             if let episode = playback.currentEpisode {
@@ -20,6 +21,10 @@ struct NowPlayingView: View {
                 .padding(.horizontal, 24)
 
                 progressSection
+
+                if !episode.chapters.isEmpty {
+                    chapterBar(for: episode)
+                }
 
                 HStack(spacing: 48) {
                     Button { playback.seek(to: max(0, playback.currentTime - 15)) } label: {
@@ -40,6 +45,9 @@ struct NowPlayingView: View {
         }
         .frame(maxWidth: .infinity)
         .background(Color.podimoBackground.ignoresSafeArea())
+        .sheet(isPresented: $showChapters) {
+            AudiobookChaptersView()
+        }
     }
 
     private var progressSection: some View {
@@ -59,6 +67,62 @@ struct NowPlayingView: View {
             .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 32)
+    }
+
+    private func chapterBar(for episode: Episode) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                jumpToAdjacentChapter(for: episode, forward: false)
+            } label: {
+                Image(systemName: "backward.end.fill")
+                    .foregroundStyle(Color.podimoPurple)
+            }
+
+            Button {
+                showChapters = true
+            } label: {
+                VStack(spacing: 2) {
+                    Text(chapterSubtitle(for: episode))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(currentChapter(for: episode)?.title ?? "Chapters")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.podimoInk)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity)
+            }
+
+            Button {
+                jumpToAdjacentChapter(for: episode, forward: true)
+            } label: {
+                Image(systemName: "forward.end.fill")
+                    .foregroundStyle(Color.podimoPurple)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.podimoCard, in: RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 32)
+    }
+
+    private func currentChapter(for episode: Episode) -> AudiobookChapter? {
+        episode.chapter(at: playback.currentTime)
+    }
+
+    private func chapterSubtitle(for episode: Episode) -> String {
+        guard let chapter = currentChapter(for: episode) else { return "\(episode.chapters.count) chapters" }
+        return "Chapter \(chapter.sequence) of \(episode.chapters.count)"
+    }
+
+    private func jumpToAdjacentChapter(for episode: Episode, forward: Bool) {
+        let chapters = episode.chapters.sorted { $0.sequence < $1.sequence }
+        let currentSequence = currentChapter(for: episode)?.sequence
+        guard let currentIndex = chapters.firstIndex(where: { $0.sequence == currentSequence }) else { return }
+        let targetIndex = forward ? currentIndex + 1 : currentIndex - 1
+        guard chapters.indices.contains(targetIndex) else { return }
+        playback.seek(to: chapters[targetIndex].startTimestampInSeconds)
     }
 
     private func format(_ seconds: Double) -> String {

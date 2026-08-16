@@ -117,7 +117,7 @@ struct LibraryView: View {
     }
 
     private func episode(from record: ListeningProgressRecord) -> Episode? {
-        Episode(dict: [
+        guard var episode = Episode(dict: [
             "id": record.episodeId,
             "podcastId": record.podcastId,
             "podcastName": record.podcastName,
@@ -126,7 +126,10 @@ struct LibraryView: View {
             "hasVideo": record.hasVideo,
             "duration": record.duration,
             "userProgress": ["progress": record.progress, "listenTime": record.listenTime]
-        ])
+        ]) else { return nil }
+        episode.chapters = record.chapters
+        episode.isAudiobook = record.isAudiobook
+        return episode
     }
 
     private var librarySection: some View {

@@ -1,12 +1,12 @@
 import SwiftUI
 
 struct MiniPlayerBar: View {
-    @Binding var showNowPlaying: Bool
+    let onTap: () -> Void
     @State private var playback = PlaybackManager.shared
 
     var body: some View {
         if let episode = playback.currentEpisode {
-            Button { showNowPlaying = true } label: {
+            Button(action: onTap) {
                 HStack(spacing: 12) {
                     RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 10)
                         .frame(width: 44, height: 44)

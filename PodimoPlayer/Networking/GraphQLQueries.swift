@@ -110,6 +110,7 @@ enum GraphQLQueries {
 
     fragment PodcastBaseFragment on Podcast {
         authorName
+        description
         hasVideo
         id
         podcastType
@@ -281,6 +282,38 @@ enum GraphQLQueries {
         __typename
       }
       __typename
+    }
+    """
+
+    static let audiobookMetadata = """
+    query FetchAudiobookMetadata($id: String!) {
+      audiobookById(id: $id) {
+        __typename
+        ...AudiobookMetadataFragment
+      }
+    }
+
+    fragment AudiobookChapterFagment on AudiobookChapter {
+      __typename
+      sequence
+      title
+      duration
+      startTimestampInSeconds
+    }
+
+    fragment AudiobookMetadataFragment on Audiobook {
+      __typename
+      id
+      userState {
+        __typename
+        isAddedToLibrary
+        isMarkedAsPlayed
+        rating
+      }
+      chapters {
+        __typename
+        ...AudiobookChapterFagment
+      }
     }
     """
 }

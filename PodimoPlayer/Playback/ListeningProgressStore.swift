@@ -12,6 +12,8 @@ struct ListeningProgressRecord: Codable, Identifiable, Equatable {
     var listenTime: Double
     var progress: Double
     var lastListenDatetime: Date
+    var chapters: [AudiobookChapter] = []
+    var isAudiobook = false
 
     var id: String { episodeId }
 }
@@ -54,7 +56,9 @@ final class ListeningProgressStore: @unchecked Sendable {
             duration: duration,
             listenTime: currentTime,
             progress: progress,
-            lastListenDatetime: Date()
+            lastListenDatetime: Date(),
+            chapters: episode.chapters,
+            isAudiobook: episode.isAudiobook
         )
         records.removeAll { $0.episodeId == episode.id }
         records.append(record)

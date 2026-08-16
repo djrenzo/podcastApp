@@ -4,13 +4,34 @@ struct EpisodeRow: View {
     let episode: Episode
     @State private var downloads = DownloadManager.shared
     @State private var coordinator = PlaybackCoordinator.shared
+    @State private var progressStore = ListeningProgressStore.shared
     @State private var isResolvingDownloadURL = false
 
     private var downloadState: DownloadState { downloads.state(for: episode.id) }
 
+    /// The locally-tracked listen position, if any, takes precedence over
+    /// whatever the API last reported — it reflects more recent listening
+    /// than the server may have synced yet.
+    private var effectiveProgress: EpisodeProgress? {
+        if let record = progressStore.records.first(where: { $0.episodeId == episode.id }) {
+            return EpisodeProgress(progress: record.progress, listenTime: record.listenTime)
+        }
+        return episode.userProgress
+    }
+
+    private var playableEpisode: Episode {
+        var updated = episode
+        updated.userProgress = effectiveProgress
+        return updated
+    }
+
+    private var isCompleted: Bool {
+        episode.isMarkedAsPlayed || (effectiveProgress?.progress ?? 0) >= 0.95
+    }
+
     var body: some View {
         Button {
-            coordinator.play(episode: episode)
+            coordinator.play(episode: playableEpisode)
         } label: {
             HStack(alignment: .top, spacing: 12) {
                 RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 12)
@@ -28,8 +49,19 @@ struct EpisodeRow: View {
                         Text(metaLine)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                        if isCompleted {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption)
+                                .foregroundStyle(Color.podimoMint)
+                        }
                     }
-                    if let progress = episode.userProgress?.progress, progress > 0.02 {
+                    if let description = episode.description, !description.isEmpty {
+                        Text(description.trimmingCharacters(in: .whitespacesAndNewlines))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    if let progress = effectiveProgress?.progress, progress > 0.02 {
                         ProgressView(value: min(progress, 1))
                             .tint(Color.podimoCoral)
                     }

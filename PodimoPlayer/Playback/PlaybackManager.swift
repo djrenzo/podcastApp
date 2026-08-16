@@ -1,6 +1,7 @@
 import AVFoundation
 import MediaPlayer
 import Observation
+import UIKit
 
 @Observable
 final class PlaybackManager: @unchecked Sendable {
@@ -11,10 +12,20 @@ final class PlaybackManager: @unchecked Sendable {
     private(set) var isPlaying = false
     private(set) var currentTime: Double = 0
     private(set) var duration: Double = 0
+
+    /// The lighter, audio-only rendition a video episode always starts on.
+    private(set) var audioURL: URL?
+    /// The heavier video rendition, swapped in only when the full-screen
+    /// player is opened. Nil for episodes with no video track at all.
+    private(set) var videoStreamURL: URL?
+    private(set) var isVideoActive = false
+
     var errorMessage: String?
 
     private var timeObserver: Any?
     private var lastProgressPersist: Date = .distantPast
+    private var artwork: MPMediaItemArtwork?
+    private var artworkTask: Task<Void, Never>?
 
     private init() {
         configureAudioSession()
@@ -26,18 +37,30 @@ final class PlaybackManager: @unchecked Sendable {
         try? AVAudioSession.sharedInstance().setActive(true)
     }
 
-    func play(url: URL, episode: Episode) {
+    /// Starts playback of a new episode. Video episodes always start on the
+    /// audio-only rendition; `expandToVideo()` swaps to `videoURL` once the
+    /// user opens the full-screen player.
+    func play(episode: Episode, audioURL: URL, videoURL: URL? = nil) {
         currentEpisode = episode
+        self.audioURL = audioURL
+        self.videoStreamURL = videoURL
+        isVideoActive = false
         errorMessage = nil
-        removeObserver()
-        let item = AVPlayerItem(url: url)
-        let newPlayer = AVPlayer(playerItem: item)
-        player = newPlayer
-        observeTime()
-        NotificationCenter.default.addObserver(self, selector: #selector(handleDidFinish), name: .AVPlayerItemDidPlayToEndTime, object: item)
-        newPlayer.play()
-        isPlaying = true
-        updateNowPlayingInfo()
+        artwork = nil
+        loadArtwork(for: episode)
+        loadItem(url: audioURL, resumeTime: episode.resumeTime ?? 0, autoplay: true)
+    }
+
+    func expandToVideo() {
+        guard let videoStreamURL, !isVideoActive else { return }
+        isVideoActive = true
+        loadItem(url: videoStreamURL, resumeTime: currentTime, autoplay: isPlaying)
+    }
+
+    func collapseToAudioOnly() {
+        guard let audioURL, isVideoActive else { return }
+        isVideoActive = false
+        loadItem(url: audioURL, resumeTime: currentTime, autoplay: isPlaying)
     }
 
     func togglePlayPause() {
@@ -61,6 +84,38 @@ final class PlaybackManager: @unchecked Sendable {
         isPlaying = false
         if let currentEpisode {
             ListeningProgressStore.shared.remove(episodeId: currentEpisode.id)
+        }
+    }
+
+    private func loadItem(url: URL, resumeTime: Double, autoplay: Bool) {
+        removeObserver()
+        let item = AVPlayerItem(url: url)
+        let newPlayer = AVPlayer(playerItem: item)
+        player = newPlayer
+        observeTime()
+        NotificationCenter.default.addObserver(self, selector: #selector(handleDidFinish), name: .AVPlayerItemDidPlayToEndTime, object: item)
+        if resumeTime > 0 {
+            newPlayer.seek(to: CMTime(seconds: resumeTime, preferredTimescale: 600))
+        }
+        if autoplay {
+            newPlayer.play()
+        }
+        isPlaying = autoplay
+        updateNowPlayingInfo()
+    }
+
+    private func loadArtwork(for episode: Episode) {
+        artworkTask?.cancel()
+        guard let imageUrlString = episode.imageUrl, let imageUrl = URL(string: imageUrlString) else { return }
+        artworkTask = Task { [weak self] in
+            guard let (data, _) = try? await URLSession.shared.data(from: imageUrl),
+                  let image = UIImage(data: data),
+                  !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self, self.currentEpisode?.id == episode.id else { return }
+                self.artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                self.updateNowPlayingInfo()
+            }
         }
     }
 
@@ -88,6 +143,9 @@ final class PlaybackManager: @unchecked Sendable {
             player.removeTimeObserver(timeObserver)
         }
         timeObserver = nil
+        // Swapping items (audio <-> video) re-registers this on every call,
+        // so drop any prior registration to avoid stacking observers.
+        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: nil)
     }
 
     private func configureRemoteCommands() {
@@ -124,13 +182,27 @@ final class PlaybackManager: @unchecked Sendable {
     private func updateNowPlayingInfo(timeOnly: Bool = false) {
         guard let episode = currentEpisode else { return }
         var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+        // Title is recomputed on every tick (not just timeOnly: false) so an
+        // audiobook's title tracks which chapter is currently playing.
+        info[MPMediaItemPropertyTitle] = nowPlayingTitle(for: episode)
         if !timeOnly {
-            info[MPMediaItemPropertyTitle] = episode.title
             info[MPMediaItemPropertyArtist] = episode.podcastName
+            // Set (or clear, while the new episode's artwork is still downloading)
+            // on every non-timeOnly update so a previous episode's artwork can't linger.
+            info[MPMediaItemPropertyArtwork] = artwork
         }
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         info[MPMediaItemPropertyPlaybackDuration] = duration
         info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? 1.0 : 0.0
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+    }
+
+    /// Podcast episodes: just the episode title (artist is the podcast name).
+    /// Audiobooks: "<current chapter> • <book title>" (artist is the author).
+    private func nowPlayingTitle(for episode: Episode) -> String {
+        guard episode.isAudiobook, let chapter = episode.chapter(at: currentTime) else {
+            return episode.title
+        }
+        return "\(chapter.title) • \(episode.title)"
     }
 }

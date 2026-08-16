@@ -57,11 +57,35 @@ struct PodcastDetailView: View {
                     }
                 }
             }
+            metaChips
             if let description = podcast.description, !description.isEmpty {
                 Text(description).font(.footnote).foregroundStyle(.secondary).lineLimit(4)
             }
         }
         .padding(20)
+    }
+
+    private var metaChips: some View {
+        HStack(spacing: 8) {
+            if podcast.hasVideo {
+                metaChip(icon: "video.fill", text: "Video")
+            }
+            if podcast.isFollowing == true {
+                metaChip(icon: "checkmark", text: "Following")
+            }
+            if !episodes.isEmpty {
+                metaChip(icon: "list.bullet", text: "\(episodes.count)\(hasMore ? "+" : "") episodes")
+            }
+        }
+    }
+
+    private func metaChip(icon: String, text: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Color.podimoPurple)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.podimoPurple.opacity(0.12), in: Capsule())
     }
 
     private func load() async {

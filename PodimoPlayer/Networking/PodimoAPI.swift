@@ -131,6 +131,20 @@ final class PodimoAPI: @unchecked Sendable {
         return (audiobook, related)
     }
 
+    func getAudiobookChapters(audiobookId: String) async throws -> [AudiobookChapter] {
+        let data = try await perform(
+            operationName: "FetchAudiobookMetadata",
+            query: GraphQLQueries.audiobookMetadata,
+            variables: ["id": audiobookId],
+            extraHeaders: ["user-os": "ios", "user-version": "2.17.0"]
+        )
+        guard let audiobook = data["audiobookById"] as? [String: Any] else {
+            throw PodimoError.badResponse
+        }
+        let chaptersList = audiobook["chapters"] as? [[String: Any]] ?? []
+        return chaptersList.compactMap { AudiobookChapter(dict: $0) }
+    }
+
     func getEpisodeURL(podcastId: String, episodeId: String) async throws -> String {
         let data = try await perform(operationName: "PlaybackByPodcastEpisodeQuery", query: GraphQLQueries.mediaURL, variables: ["podcastId": podcastId, "episodeId": episodeId])
         guard let playback = data["playbackByPodcastEpisode"] as? [String: Any],
