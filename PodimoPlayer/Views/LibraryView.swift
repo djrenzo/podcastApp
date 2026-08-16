@@ -105,9 +105,7 @@ struct LibraryView: View {
             SectionHeader(title: "Keep Listening", subtitle: "\(keepListeningRecords.count) in progress")
             ForEach(visibleKeepListeningRecords) { record in
                 if let episode = episode(from: record) {
-                    SwipeToRevealActions(actions: doneActions(for: episode)) {
-                        EpisodeRow(episode: episode)
-                    }
+                    EpisodeRow(episode: episode)
                 }
             }
             if keepListeningRecords.count > 5 {
@@ -132,26 +130,6 @@ struct LibraryView: View {
         episode.chapters = record.chapters
         episode.isAudiobook = record.isAudiobook
         return episode
-    }
-
-    private func doneActions(for episode: Episode) -> [SwipeDoneAction] {
-        guard episode.isAudiobook else {
-            return [
-                SwipeDoneAction(title: "Mark as Done", icon: "checkmark.circle.fill", tint: Color.podimoMint) {
-                    ListeningProgressStore.shared.markAsDone(episodeId: episode.id)
-                }
-            ]
-        }
-        var actions: [SwipeDoneAction] = []
-        if let chapter = episode.chapter(at: episode.userProgress?.listenTime ?? 0) {
-            actions.append(SwipeDoneAction(title: "Mark Chapter as Done", icon: "checkmark", tint: Color.podimoPurple) {
-                AudiobookChapterProgressStore.shared.markCompleted(episodeId: episode.id, sequence: chapter.sequence)
-            })
-        }
-        actions.append(SwipeDoneAction(title: "Mark Book as Done", icon: "checkmark.circle.fill", tint: Color.podimoMint) {
-            ListeningProgressStore.shared.markAsDone(episodeId: episode.id)
-        })
-        return actions
     }
 
     private var librarySection: some View {
@@ -252,82 +230,6 @@ private struct CollapsibleGridSection<Item: Identifiable, ItemView: View>: View 
                     }
                 }
             }
-        }
-    }
-}
-
-struct SwipeDoneAction: Identifiable {
-    let id = UUID()
-    let title: String
-    let icon: String
-    let tint: Color
-    let action: () -> Void
-}
-
-/// Keep Listening isn't backed by a List (it's a plain ScrollView/LazyVStack,
-/// to match the rest of this card-based layout), so the built-in
-/// `.swipeActions` modifier — which only works on List rows — isn't available.
-/// This reimplements the same "swipe left to reveal action buttons" gesture by hand.
-private struct SwipeToRevealActions<Content: View>: View {
-    let actions: [SwipeDoneAction]
-    @ViewBuilder let content: () -> Content
-
-    @State private var offset: CGFloat = 0
-    @State private var isRevealed = false
-
-    private let actionWidth: CGFloat = 90
-    private var revealWidth: CGFloat { CGFloat(actions.count) * actionWidth }
-
-    var body: some View {
-        ZStack(alignment: .trailing) {
-            HStack(spacing: 0) {
-                ForEach(actions) { action in
-                    Button {
-                        action.action()
-                        collapse()
-                    } label: {
-                        VStack(spacing: 4) {
-                            Image(systemName: action.icon).font(.title3)
-                            Text(action.title)
-                                .font(.caption2.weight(.semibold))
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
-                        }
-                        .frame(width: actionWidth)
-                        .frame(maxHeight: .infinity)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                    }
-                    .background(action.tint)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 18))
-
-            content()
-                .offset(x: offset)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 16)
-                        .onChanged { value in
-                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                            let base = isRevealed ? -revealWidth : 0
-                            offset = min(0, max(base + value.translation.width, -revealWidth))
-                        }
-                        .onEnded { value in
-                            let shouldReveal = offset < -revealWidth / 2
-                            withAnimation(.snappy) {
-                                offset = shouldReveal ? -revealWidth : 0
-                                isRevealed = shouldReveal
-                            }
-                        }
-                )
-        }
-    }
-
-    private func collapse() {
-        withAnimation(.snappy) {
-            offset = 0
-            isRevealed = false
         }
     }
 }

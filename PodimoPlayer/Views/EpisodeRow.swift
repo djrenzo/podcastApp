@@ -1,5 +1,12 @@
 import SwiftUI
 
+struct SwipeDoneAction: Identifiable {
+    let id = UUID()
+    let title: String
+    let icon: String
+    let action: () -> Void
+}
+
 struct EpisodeRow: View {
     let episode: Episode
     @State private var downloads = DownloadManager.shared
@@ -9,10 +16,15 @@ struct EpisodeRow: View {
 
     private var downloadState: DownloadState { downloads.state(for: episode.id) }
 
-    /// The locally-tracked listen position, if any, takes precedence over
-    /// whatever the API last reported — it reflects more recent listening
-    /// than the server may have synced yet.
+    /// Local data always takes precedence over the API — a locally-finished
+    /// episode stays finished even if the API never got told (it's dropped
+    /// from `records` once done, so that check has to come first or a stale
+    /// "still in progress" API value would leak back through below), then an
+    /// in-progress local record, then finally whatever the API last reported.
     private var effectiveProgress: EpisodeProgress? {
+        if progressStore.isCompleted(episodeId: episode.id) {
+            return EpisodeProgress(progress: 1.0, listenTime: episode.duration)
+        }
         if let record = progressStore.records.first(where: { $0.episodeId == episode.id }) {
             return EpisodeProgress(progress: record.progress, listenTime: record.listenTime)
         }
@@ -26,9 +38,7 @@ struct EpisodeRow: View {
     }
 
     private var isCompleted: Bool {
-        episode.isMarkedAsPlayed
-            || progressStore.isCompleted(episodeId: episode.id)
-            || (effectiveProgress?.progress ?? 0) >= 0.95
+        episode.isMarkedAsPlayed || (effectiveProgress?.progress ?? 0) >= 0.95
     }
 
     /// For audiobooks (only ever shown here via Keep Listening), lead with
@@ -41,6 +51,26 @@ struct EpisodeRow: View {
             return episode.title
         }
         return "\(chapter.title) • \(episode.title)"
+    }
+
+    private var doneActions: [SwipeDoneAction] {
+        guard episode.isAudiobook else {
+            return [
+                SwipeDoneAction(title: "Mark as Done", icon: "checkmark.circle.fill") {
+                    ListeningProgressStore.shared.markAsDone(episodeId: episode.id)
+                }
+            ]
+        }
+        var actions: [SwipeDoneAction] = []
+        if let chapter = episode.chapter(at: effectiveProgress?.listenTime ?? 0) {
+            actions.append(SwipeDoneAction(title: "Mark Chapter as Done", icon: "checkmark") {
+                AudiobookChapterProgressStore.shared.markCompleted(episodeId: episode.id, sequence: chapter.sequence)
+            })
+        }
+        actions.append(SwipeDoneAction(title: "Mark Book as Done", icon: "checkmark.circle.fill") {
+            ListeningProgressStore.shared.markAsDone(episodeId: episode.id)
+        })
+        return actions
     }
 
     var body: some View {
@@ -94,6 +124,15 @@ struct EpisodeRow: View {
             .background(Color.podimoCard, in: RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            ForEach(doneActions) { action in
+                Button {
+                    action.action()
+                } label: {
+                    Label(action.title, systemImage: action.icon)
+                }
+            }
+        }
     }
 
     private var metaLine: String {

@@ -1,40 +1,56 @@
 import SwiftUI
 
+private let artworkCache = NSCache<NSString, UIImage>()
+
 struct RemoteArtwork: View {
     let urlString: String?
     var cornerRadius: CGFloat = 12
+
+    @State private var image: UIImage?
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius)
             .fill(LinearGradient.podimoBrand)
             .overlay {
-                if let urlString, let url = URL(string: urlString) {
-                    // .id(url) forces a fresh AsyncImage (and thus a retry) if a prior
-                    // attempt for this exact URL failed — otherwise a one-off network
-                    // hiccup leaves it permanently blank until the view is torn down
-                    // and rebuilt (e.g. an app relaunch), since nothing else prompts
-                    // AsyncImage to try again.
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        case .empty:
-                            ProgressView()
-                                .tint(.white)
-                        case .failure:
-                            Image(systemName: "waveform")
-                                .foregroundStyle(.white.opacity(0.7))
-                        @unknown default:
-                            Image(systemName: "waveform")
-                                .foregroundStyle(.white.opacity(0.7))
-                        }
-                    }
-                    .id(url)
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
                 } else {
                     Image(systemName: "waveform")
                         .foregroundStyle(.white.opacity(0.7))
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            // Hand-rolled instead of AsyncImage: AsyncImage never retries a
+            // failed load, and rows inside a LazyVStack (like Keep Listening)
+            // only materialize their view body as they scroll near the
+            // viewport — a one-off failure there just stays blank forever
+            // with no further prompt to try again. .task(id:) reruns
+            // whenever urlString changes *and* whenever this view reappears
+            // (including a lazy row being recycled back into view), which
+            // gives it a real retry path.
+            .task(id: urlString) {
+                await load()
+            }
+    }
+
+    private func load() async {
+        guard let urlString, let url = URL(string: urlString) else {
+            image = nil
+            return
+        }
+        let cacheKey = urlString as NSString
+        if let cached = artworkCache.object(forKey: cacheKey) {
+            image = cached
+            return
+        }
+        guard let (data, _) = try? await URLSession.shared.data(from: url),
+              let loaded = UIImage(data: data) else {
+            return
+        }
+        guard urlString == self.urlString else { return }
+        artworkCache.setObject(loaded, forKey: cacheKey)
+        image = loaded
     }
 }
