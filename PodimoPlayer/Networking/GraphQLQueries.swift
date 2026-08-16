@@ -201,4 +201,86 @@ enum GraphQLQueries {
      __typename
     }
     """
+
+    static let audiobookChannel = """
+    query AudiobookChannelQuery($audiobookId: String!, $limit: Int!, $offset: Int!) {
+      audiobook: audiobookById(id: $audiobookId) {
+        ...AudiobookChannelItem
+        __typename
+      }
+      youMightAlsoLikeData: audiobookYouMightAlsoLike(
+        audiobookId: $audiobookId
+        limit: $limit
+        offset: $offset
+      ) {
+        ...AudiobookCollectionItem
+        __typename
+      }
+    }
+
+    fragment AudiobookChannelItem on Audiobook {
+      id
+      title
+      description
+      authorNames
+      narratorNames
+      publisherName
+      yearOfBookPublication
+      language {
+        localisedLanguage
+        __typename
+      }
+      accessLevel
+      userState {
+        isMarkedAsPlayed
+        isAddedToLibrary
+        rating
+        userProgress {
+          listenTime
+          lastListenDatetime
+          __typename
+        }
+        __typename
+      }
+      rating {
+        totalVoteCount
+        upVoteCount
+        __typename
+      }
+      coverImage {
+        url
+        mainColor
+        __typename
+      }
+      audio {
+        duration
+        url
+        hlsUrl
+        __typename
+      }
+      streamMeta {
+        isAvailableForStreaming
+        availableForStreamingFrom
+        __typename
+      }
+      __typename
+    }
+
+    fragment AudiobookCollectionItem on Audiobook {
+      id
+      title
+      description
+      authorNames
+      coverImage {
+        url
+        mainColor
+        __typename
+      }
+      userState {
+        isAddedToLibrary
+        __typename
+      }
+      __typename
+    }
+    """
 }

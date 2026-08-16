@@ -4,7 +4,12 @@ struct PodcastDetailView: View {
     let podcast: Podcast
     @State private var episodes: [Episode] = []
     @State private var isLoading = false
+    @State private var isLoadingMore = false
     @State private var errorMessage: String?
+    @State private var offset = 0
+    @State private var hasMore = true
+
+    private let pageSize = 50
 
     var body: some View {
         ScrollView {
@@ -18,6 +23,14 @@ struct PodcastDetailView: View {
                     ForEach(episodes) { episode in
                         EpisodeRow(episode: episode)
                             .padding(.horizontal, 20)
+                            .onAppear {
+                                if episode.id == episodes.last?.id {
+                                    Task { await loadMore() }
+                                }
+                            }
+                    }
+                    if isLoadingMore {
+                        ProgressView().frame(maxWidth: .infinity).padding(.vertical, 20)
                     }
                 }
             }
@@ -54,11 +67,31 @@ struct PodcastDetailView: View {
     private func load() async {
         isLoading = true
         errorMessage = nil
+        offset = 0
+        hasMore = true
         do {
-            episodes = try await PodimoAPI.shared.getEpisodes(podcastId: podcast.id, limit: 50, offset: 0)
+            let page = try await PodimoAPI.shared.getEpisodes(podcastId: podcast.id, limit: pageSize, offset: 0)
+            episodes = page
+            offset = page.count
+            hasMore = page.count == pageSize
         } catch {
             errorMessage = error.localizedDescription
         }
         isLoading = false
+    }
+
+    private func loadMore() async {
+        guard !isLoadingMore, !isLoading, hasMore else { return }
+        isLoadingMore = true
+        do {
+            let page = try await PodimoAPI.shared.getEpisodes(podcastId: podcast.id, limit: pageSize, offset: offset)
+            let existingIds = Set(episodes.map(\.id))
+            episodes.append(contentsOf: page.filter { !existingIds.contains($0.id) })
+            offset += page.count
+            hasMore = page.count == pageSize
+        } catch {
+            hasMore = false
+        }
+        isLoadingMore = false
     }
 }

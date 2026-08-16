@@ -2,10 +2,27 @@ import SwiftUI
 
 struct LibraryView: View {
     @State private var entries: [LibraryEntry] = []
-    @State private var followed: [Episode] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var progressStore = ListeningProgressStore.shared
+    @State private var keepListeningExpanded = false
     private let credentials = CredentialsStore.shared
+
+    private var podcasts: [Podcast] {
+        entries.compactMap { if case .podcast(let podcast) = $0 { return podcast }; return nil }
+    }
+
+    private var audiobooks: [Audiobook] {
+        entries.compactMap { if case .audiobook(let book) = $0 { return book }; return nil }
+    }
+
+    private var keepListeningRecords: [ListeningProgressRecord] {
+        Array(progressStore.inProgress.prefix(10))
+    }
+
+    private var visibleKeepListeningRecords: [ListeningProgressRecord] {
+        keepListeningExpanded ? keepListeningRecords : Array(keepListeningRecords.prefix(5))
+    }
 
     var body: some View {
         NavigationStack {
@@ -17,8 +34,8 @@ struct LibraryView: View {
                     } else if let errorMessage {
                         errorCard(errorMessage)
                     } else {
-                        if !followed.isEmpty {
-                            followedSection
+                        if !keepListeningRecords.isEmpty {
+                            keepListeningSection
                         }
                         librarySection
                     }
@@ -30,6 +47,9 @@ struct LibraryView: View {
             .background(Color.podimoBackground)
             .navigationTitle("Library")
             .navigationDestination(for: Podcast.self) { PodcastDetailView(podcast: $0) }
+            .navigationDestination(for: AudiobookLink.self) { link in
+                AudiobookDetailView(audiobookId: link.id, previewTitle: link.title, previewImageUrl: link.imageUrl)
+            }
             .task { await loadIfNeeded() }
             .refreshable { await load() }
         }
@@ -80,29 +100,48 @@ struct LibraryView: View {
         .background(Color.podimoCard, in: RoundedRectangle(cornerRadius: 24))
     }
 
-    private var followedSection: some View {
+    private var keepListeningSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "New Episodes", subtitle: "\(followed.count) waiting for you")
-            ForEach(followed) { episode in
-                EpisodeRow(episode: episode)
+            SectionHeader(title: "Keep Listening", subtitle: "\(keepListeningRecords.count) in progress")
+            ForEach(visibleKeepListeningRecords) { record in
+                if let episode = episode(from: record) {
+                    EpisodeRow(episode: episode)
+                }
+            }
+            if keepListeningRecords.count > 5 {
+                ExpandButton(isExpanded: keepListeningExpanded, collapsedLabel: "Show 10", expandedLabel: "Show fewer") {
+                    keepListeningExpanded.toggle()
+                }
             }
         }
     }
 
+    private func episode(from record: ListeningProgressRecord) -> Episode? {
+        Episode(dict: [
+            "id": record.episodeId,
+            "podcastId": record.podcastId,
+            "podcastName": record.podcastName,
+            "title": record.title,
+            "imageUrl": record.imageUrl as Any,
+            "hasVideo": record.hasVideo,
+            "duration": record.duration,
+            "userProgress": ["progress": record.progress, "listenTime": record.listenTime]
+        ])
+    }
+
     private var librarySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Your Library", subtitle: "\(entries.count) shows")
-            if isLoading && entries.isEmpty {
-                ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
-            } else if entries.isEmpty {
-                Text("No shows in your library yet.")
-                    .foregroundStyle(.secondary)
-            } else {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                    ForEach(entries) { entry in
-                        LibraryEntryCard(entry: entry)
-                    }
+        VStack(alignment: .leading, spacing: 28) {
+            CollapsibleGridSection(title: "Podcasts", items: podcasts, collapsedCount: 6, isLoading: isLoading && entries.isEmpty, emptyMessage: "No podcasts in your library yet.") { podcast in
+                NavigationLink(value: podcast) {
+                    LibraryCardBody(imageUrl: podcast.imageUrl, title: podcast.title, subtitle: podcast.authorName ?? "", badge: podcast.hasVideo)
                 }
+                .buttonStyle(.plain)
+            }
+            CollapsibleGridSection(title: "Audiobooks", items: audiobooks, collapsedCount: 6, isLoading: isLoading && entries.isEmpty, emptyMessage: "No audiobooks in your library yet.") { book in
+                NavigationLink(value: AudiobookLink(id: book.id, title: book.title, imageUrl: book.imageUrl)) {
+                    LibraryCardBody(imageUrl: book.imageUrl, title: book.title, subtitle: book.authors.joined(separator: ", "), badge: false)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -117,10 +156,7 @@ struct LibraryView: View {
         isLoading = true
         errorMessage = nil
         do {
-            async let libraryTask = PodimoAPI.shared.getLibrary()
-            async let followedTask = PodimoAPI.shared.getEpisodesFollowed(limit: 10)
-            entries = try await libraryTask
-            followed = try await followedTask
+            entries = try await PodimoAPI.shared.getLibrary()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -141,22 +177,67 @@ private struct SectionHeader: View {
     }
 }
 
-private struct LibraryEntryCard: View {
-    let entry: LibraryEntry
+private struct ExpandButton: View {
+    let isExpanded: Bool
+    let collapsedLabel: String
+    let expandedLabel: String
+    let action: () -> Void
 
     var body: some View {
-        switch entry {
-        case .podcast(let podcast):
-            NavigationLink(value: podcast) {
-                cardBody(imageUrl: podcast.imageUrl, title: podcast.title, subtitle: podcast.authorName ?? "", badge: podcast.hasVideo)
-            }
-            .buttonStyle(.plain)
-        case .audiobook(let book):
-            cardBody(imageUrl: book.imageUrl, title: book.title, subtitle: book.authors.joined(separator: ", "), badge: false)
+        Button {
+            withAnimation { action() }
+        } label: {
+            Text(isExpanded ? expandedLabel : collapsedLabel)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.podimoPurple)
         }
     }
+}
 
-    private func cardBody(imageUrl: String?, title: String, subtitle: String, badge: Bool) -> some View {
+private struct CollapsibleGridSection<Item: Identifiable, ItemView: View>: View {
+    let title: String
+    let items: [Item]
+    let collapsedCount: Int
+    let isLoading: Bool
+    let emptyMessage: String
+    @ViewBuilder let itemView: (Item) -> ItemView
+    @State private var expanded = false
+
+    private var visibleItems: [Item] {
+        expanded ? items : Array(items.prefix(collapsedCount))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: title, subtitle: "\(items.count)")
+            if isLoading {
+                ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
+            } else if items.isEmpty {
+                Text(emptyMessage)
+                    .foregroundStyle(.secondary)
+            } else {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    ForEach(visibleItems) { item in
+                        itemView(item)
+                    }
+                }
+                if items.count > collapsedCount {
+                    ExpandButton(isExpanded: expanded, collapsedLabel: "Show all (\(items.count))", expandedLabel: "Show fewer") {
+                        expanded.toggle()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct LibraryCardBody: View {
+    let imageUrl: String?
+    let title: String
+    let subtitle: String
+    let badge: Bool
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .topTrailing) {
                 RemoteArtwork(urlString: imageUrl, cornerRadius: 16)

@@ -76,6 +76,7 @@ struct DownloadsView: View {
         let url = URL(fileURLWithPath: record.localPath)
         if episode.hasVideo {
             coordinator.videoEpisode = episode
+            coordinator.audioOnlyURL = nil
             coordinator.videoURL = url
         } else {
             PlaybackManager.shared.play(url: url, episode: episode)

@@ -118,6 +118,16 @@ final class PodimoAPI: @unchecked Sendable {
         return list.compactMap { Episode(dict: $0) }
     }
 
+    func getAudiobookChannel(audiobookId: String, limit: Int = 10, offset: Int = 0) async throws -> (audiobook: AudiobookDetail, youMightAlsoLike: [AudiobookSummary]) {
+        let data = try await perform(operationName: "AudiobookChannelQuery", query: GraphQLQueries.audiobookChannel, variables: ["audiobookId": audiobookId, "limit": limit, "offset": offset])
+        guard let audiobookDict = data["audiobook"] as? [String: Any], let audiobook = AudiobookDetail(dict: audiobookDict) else {
+            throw PodimoError.badResponse
+        }
+        let relatedList = data["youMightAlsoLikeData"] as? [[String: Any]] ?? []
+        let related = relatedList.compactMap { AudiobookSummary(dict: $0) }
+        return (audiobook, related)
+    }
+
     func getEpisodeURL(podcastId: String, episodeId: String) async throws -> String {
         let data = try await perform(operationName: "PlaybackByPodcastEpisodeQuery", query: GraphQLQueries.mediaURL, variables: ["podcastId": podcastId, "episodeId": episodeId])
         guard let playback = data["playbackByPodcastEpisode"] as? [String: Any],

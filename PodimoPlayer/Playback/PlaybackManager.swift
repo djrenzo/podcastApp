@@ -14,6 +14,7 @@ final class PlaybackManager: @unchecked Sendable {
     var errorMessage: String?
 
     private var timeObserver: Any?
+    private var lastProgressPersist: Date = .distantPast
 
     private init() {
         configureAudioSession()
@@ -48,6 +49,7 @@ final class PlaybackManager: @unchecked Sendable {
         }
         isPlaying.toggle()
         updateNowPlayingInfo()
+        persistProgressIfNeeded(force: true)
     }
 
     func seek(to seconds: Double) {
@@ -57,6 +59,9 @@ final class PlaybackManager: @unchecked Sendable {
 
     @objc private func handleDidFinish() {
         isPlaying = false
+        if let currentEpisode {
+            ListeningProgressStore.shared.remove(episodeId: currentEpisode.id)
+        }
     }
 
     private func observeTime() {
@@ -67,7 +72,15 @@ final class PlaybackManager: @unchecked Sendable {
                 self.duration = seconds
             }
             self.updateNowPlayingInfo(timeOnly: true)
+            self.persistProgressIfNeeded()
         }
+    }
+
+    private func persistProgressIfNeeded(force: Bool = false) {
+        guard let episode = currentEpisode, duration > 0 else { return }
+        guard force || Date().timeIntervalSince(lastProgressPersist) >= 5 else { return }
+        lastProgressPersist = Date()
+        ListeningProgressStore.shared.update(episode: episode, currentTime: currentTime, duration: duration)
     }
 
     private func removeObserver() {

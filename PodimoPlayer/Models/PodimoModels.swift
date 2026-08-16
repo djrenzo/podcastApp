@@ -136,3 +136,107 @@ enum LibraryEntry: Identifiable, Equatable {
         }
     }
 }
+
+/// Lightweight navigation target: enough to push an AudiobookDetailView and show
+/// something immediately, whether the tap came from the library grid or a
+/// "You might also like" tile (which carry different, smaller fragments).
+struct AudiobookLink: Identifiable, Equatable, Hashable {
+    let id: String
+    let title: String
+    let imageUrl: String?
+}
+
+struct AudiobookUserProgress: Equatable {
+    var listenTime: Double?
+    var lastListenDatetime: String?
+}
+
+struct AudiobookRatingSummary: Equatable {
+    var totalVoteCount: Double
+    var upVoteCount: Double
+
+    var likedPercentage: Int? {
+        guard totalVoteCount > 0 else { return nil }
+        return Int((upVoteCount / totalVoteCount * 100).rounded())
+    }
+}
+
+struct AudiobookDetail: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let description: String?
+    let authorNames: [String]
+    let narratorNames: [String]
+    let publisherName: String?
+    let yearOfBookPublication: String?
+    let language: String?
+    let isAddedToLibrary: Bool
+    let userProgress: AudiobookUserProgress?
+    let rating: AudiobookRatingSummary?
+    let imageUrl: String?
+    let duration: Double?
+    let audioUrl: String?
+    let hlsUrl: String?
+    let isAvailableForStreaming: Bool
+
+    init?(dict: [String: Any]) {
+        guard let id = dict["id"] as? String, let title = dict["title"] as? String else { return nil }
+        self.id = id
+        self.title = title
+        self.description = dict["description"] as? String
+        self.authorNames = dict["authorNames"] as? [String] ?? []
+        self.narratorNames = dict["narratorNames"] as? [String] ?? []
+        self.publisherName = dict["publisherName"] as? String
+        self.yearOfBookPublication = dict["yearOfBookPublication"] as? String
+        self.language = (dict["language"] as? [String: Any])?["localisedLanguage"] as? String
+
+        let userState = dict["userState"] as? [String: Any]
+        self.isAddedToLibrary = userState?["isAddedToLibrary"] as? Bool ?? false
+        if let progressDict = userState?["userProgress"] as? [String: Any] {
+            self.userProgress = AudiobookUserProgress(
+                listenTime: progressDict["listenTime"] as? Double,
+                lastListenDatetime: progressDict["lastListenDatetime"] as? String
+            )
+        } else {
+            self.userProgress = nil
+        }
+
+        if let ratingDict = dict["rating"] as? [String: Any],
+           let total = ratingDict["totalVoteCount"] as? Double,
+           let up = ratingDict["upVoteCount"] as? Double {
+            self.rating = AudiobookRatingSummary(totalVoteCount: total, upVoteCount: up)
+        } else {
+            self.rating = nil
+        }
+
+        self.imageUrl = (dict["coverImage"] as? [String: Any])?["url"] as? String
+
+        let audio = dict["audio"] as? [String: Any]
+        self.duration = audio?["duration"] as? Double
+        self.audioUrl = audio?["url"] as? String
+        self.hlsUrl = audio?["hlsUrl"] as? String
+
+        self.isAvailableForStreaming = (dict["streamMeta"] as? [String: Any])?["isAvailableForStreaming"] as? Bool ?? true
+    }
+
+    var playableURLString: String? {
+        hlsUrl ?? audioUrl
+    }
+}
+
+struct AudiobookSummary: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let description: String?
+    let authorNames: [String]
+    let imageUrl: String?
+
+    init?(dict: [String: Any]) {
+        guard let id = dict["id"] as? String, let title = dict["title"] as? String else { return nil }
+        self.id = id
+        self.title = title
+        self.description = dict["description"] as? String
+        self.authorNames = dict["authorNames"] as? [String] ?? []
+        self.imageUrl = (dict["coverImage"] as? [String: Any])?["url"] as? String
+    }
+}
