@@ -107,7 +107,7 @@ final class PodimoAPI: @unchecked Sendable {
     }
 
     func getEpisodes(podcastId: String, limit: Int = 50, offset: Int = 0) async throws -> [Episode] {
-        let data = try await perform(operationName: "PodcastEpisodesResultsQuery", query: GraphQLQueries.episodes, variables: ["podcastId": podcastId, "limit": limit, "offset": offset])
+        let data = try await perform(operationName: "PodcastEpisodesResultsQuery", query: GraphQLQueries.episodes, variables: ["podcastId": podcastId, "limit": limit, "offset": offset, "sorting": "PUBLISHED_DESCENDING"])
         let list = data["podcastEpisodes"] as? [[String: Any]] ?? []
         return list.compactMap { Episode(dict: $0) }
     }

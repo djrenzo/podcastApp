@@ -29,6 +29,7 @@ struct LibraryView: View {
             }
             .background(Color.podimoBackground)
             .navigationTitle("Library")
+            .navigationDestination(for: Podcast.self) { PodcastDetailView(podcast: $0) }
             .task { await loadIfNeeded() }
             .refreshable { await load() }
         }
@@ -150,7 +151,6 @@ private struct LibraryEntryCard: View {
                 cardBody(imageUrl: podcast.imageUrl, title: podcast.title, subtitle: podcast.authorName ?? "", badge: podcast.hasVideo)
             }
             .buttonStyle(.plain)
-            .navigationDestination(for: Podcast.self) { PodcastDetailView(podcast: $0) }
         case .audiobook(let book):
             cardBody(imageUrl: book.imageUrl, title: book.title, subtitle: book.authors.joined(separator: ", "), badge: false)
         }
