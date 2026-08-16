@@ -122,7 +122,7 @@ final class PodimoAPI: @unchecked Sendable {
     }
 
     func getAudiobookChannel(audiobookId: String, limit: Int = 10, offset: Int = 0) async throws -> (audiobook: AudiobookDetail, youMightAlsoLike: [AudiobookSummary]) {
-        let data = try await perform(operationName: "AudiobookChannelQuery", query: GraphQLQueries.audiobookChannel, variables: ["audiobookId": audiobookId, "limit": limit, "offset": offset], extraHeaders: ["user-os": "ios"])
+        let data = try await perform(operationName: "AudiobookChannelQuery", query: GraphQLQueries.audiobookChannel, variables: ["audiobookId": audiobookId, "limit": limit, "offset": offset], extraHeaders: ["user-os": "ios", "user-version": "2.17.0"])
         guard let audiobookDict = data["audiobook"] as? [String: Any], let audiobook = AudiobookDetail(dict: audiobookDict) else {
             throw PodimoError.badResponse
         }

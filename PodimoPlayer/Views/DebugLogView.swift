@@ -13,16 +13,15 @@ struct DebugLogView: View {
                 )
             } else {
                 ForEach(store.entries) { entry in
-                    NavigationLink(value: entry) {
+                    NavigationLink {
+                        DebugLogDetailView(entry: entry)
+                    } label: {
                         DebugLogRow(entry: entry)
                     }
                 }
             }
         }
         .navigationTitle("Request Log")
-        .navigationDestination(for: DebugLogEntry.self) { entry in
-            DebugLogDetailView(entry: entry)
-        }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Clear", role: .destructive) { store.clear() }
@@ -87,9 +86,4 @@ private struct DebugLogDetailView: View {
                 .textSelection(.enabled)
         }
     }
-}
-
-extension DebugLogEntry: Hashable {
-    static func == (lhs: DebugLogEntry, rhs: DebugLogEntry) -> Bool { lhs.id == rhs.id }
-    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
