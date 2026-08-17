@@ -43,6 +43,13 @@ struct LibraryView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 120)
+                // Deliberately on the LazyVStack, not the ScrollView below:
+                // .refreshable re-lays-out whatever it's attached to (to inset
+                // for the spinner), and a .task sharing that same node gets its
+                // lifecycle torn down and reinstalled by that re-layout — which
+                // cancels .refreshable's own just-started request along with it.
+                // Different nodes, decoupled lifecycles.
+                .task { await loadIfNeeded() }
             }
             .background(Color.podimoBackground)
             .navigationTitle("Library")
@@ -50,7 +57,6 @@ struct LibraryView: View {
             .navigationDestination(for: AudiobookLink.self) { link in
                 AudiobookDetailView(audiobookId: link.id, previewTitle: link.title, previewImageUrl: link.imageUrl)
             }
-            .task { await loadIfNeeded() }
             .refreshable { await load() }
         }
     }
@@ -154,13 +160,22 @@ struct LibraryView: View {
         await load()
     }
 
-    private func load() async {
+    private func load(retryOnCancel: Bool = true) async {
         guard credentials.hasCredentials else { return }
         isLoading = true
         errorMessage = nil
         do {
             entries = try await PodimoAPI.shared.getLibrary()
         } catch {
+            // .refreshable's own task lifecycle can cancel the in-flight
+            // request out from under it (e.g. superseded by another pull) —
+            // that's not a real failure (retrying always just works), so
+            // don't surface a scary "cancelled" alert for it. Retry once,
+            // silently, instead.
+            if retryOnCancel, (error as? URLError)?.code == .cancelled {
+                await load(retryOnCancel: false)
+                return
+            }
             errorMessage = error.localizedDescription
         }
         isLoading = false
