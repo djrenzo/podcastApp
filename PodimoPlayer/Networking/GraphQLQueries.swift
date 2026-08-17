@@ -316,4 +316,101 @@ enum GraphQLQueries {
       }
     }
     """
+
+    // Trimmed from the captured request: dropped searchPodcastEpisodes (and
+    // its EpisodeBaseFragment) since the search UI only surfaces podcasts and
+    // audiobooks.
+    static let search = """
+    query Search($searchParams: SearchInput!) {
+      searchPodcasts(search: $searchParams) {
+        ...PodcastBaseFragment
+        __typename
+      }
+      searchAudiobooks(search: $searchParams) {
+        ...AudiobookBaseFragment
+        __typename
+      }
+    }
+
+    fragment PodcastBaseFragment on Podcast {
+      id
+      title
+      authorName
+      podcastType
+      hasVideo
+      ...PodcastUserStatsFragment
+      ...PodcastImagesFragment
+      ...PodcastFeaturesStatusFragment
+      __typename
+    }
+
+    fragment PodcastUserStatsFragment on Podcast {
+      userStats {
+        isFollowing
+        __typename
+      }
+      __typename
+    }
+
+    fragment PodcastImagesFragment on Podcast {
+      images {
+        coverImageUrl
+        artworkOutstretchedUrl
+        artworkPremiumUrl
+        __typename
+      }
+      __typename
+    }
+
+    fragment PodcastFeaturesStatusFragment on Podcast {
+      featuresStatus {
+        badge
+        __typename
+      }
+      __typename
+    }
+
+    fragment AudiobookBaseFragment on Audiobook {
+      id
+      title
+      accessLevels
+      authors {
+        name
+        __typename
+      }
+      duration
+      ...AudioBookUserStateFragment
+      ...AudiobookCoverImageFragment
+      __typename
+    }
+
+    fragment AudioBookUserStateFragment on Audiobook {
+      userState {
+        isAddedToLibrary
+        isMarkedAsPlayed
+        ...AudiobookUserProgressFragment
+        __typename
+      }
+      __typename
+    }
+
+    fragment AudiobookUserProgressFragment on AudiobookUserState {
+      userProgress {
+        progress
+        listenTime
+        lastListenDatetime
+        __typename
+      }
+      __typename
+    }
+
+    fragment AudiobookCoverImageFragment on Audiobook {
+      coverImage {
+        url
+        mainColor
+        __typename
+      }
+      __typename
+    }
+    """
 }

@@ -59,6 +59,11 @@ final class PlaybackCoordinator: @unchecked Sendable {
     /// direct, if short-lived, audio URL from the audiobook channel query instead.
     func playAudiobook(episode: Episode) {
         errorMessage = nil
+        if let record = DownloadManager.shared.record(for: episode.id) {
+            playLocal(episode: episode, url: URL(fileURLWithPath: record.localPath))
+            return
+        }
+
         isResolving = true
         Task {
             do {

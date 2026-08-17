@@ -1,5 +1,22 @@
 import SwiftUI
 
+enum EpisodeSortOrder: String {
+    case descending = "PUBLISHED_DESCENDING"
+    case ascending = "PUBLISHED_ASCENDING"
+
+    var toggled: EpisodeSortOrder {
+        self == .descending ? .ascending : .descending
+    }
+
+    var label: String {
+        self == .descending ? "Newest First" : "Oldest First"
+    }
+
+    var icon: String {
+        self == .descending ? "arrow.down" : "arrow.up"
+    }
+}
+
 struct PodcastDetailView: View {
     let podcast: Podcast
     @State private var episodes: [Episode] = []
@@ -8,8 +25,10 @@ struct PodcastDetailView: View {
     @State private var errorMessage: String?
     @State private var offset = 0
     @State private var hasMore = true
+    @State private var sortOrder: EpisodeSortOrder = .descending
 
     private let pageSize = 50
+    private var sortOrderKey: String { "podimo_episode_sort_\(podcast.id)" }
 
     var body: some View {
         ScrollView {
@@ -39,7 +58,10 @@ struct PodcastDetailView: View {
         .background(Color.podimoBackground)
         .navigationTitle(podcast.title)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        .task {
+            loadSortOrder()
+            await load()
+        }
     }
 
     private var header: some View {
@@ -76,7 +98,25 @@ struct PodcastDetailView: View {
             if !episodes.isEmpty {
                 metaChip(icon: "list.bullet", text: "\(episodes.count)\(hasMore ? "+" : "") episodes")
             }
+            Spacer()
+            sortButton
         }
+    }
+
+    private var sortButton: some View {
+        Button {
+            sortOrder = sortOrder.toggled
+            saveSortOrder()
+            Task { await load() }
+        } label: {
+            Label(sortOrder.label, systemImage: sortOrder.icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.podimoPurple)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.podimoPurple.opacity(0.12), in: Capsule())
+        }
+        .disabled(isLoading)
     }
 
     private func metaChip(icon: String, text: String) -> some View {
@@ -88,13 +128,23 @@ struct PodcastDetailView: View {
             .background(Color.podimoPurple.opacity(0.12), in: Capsule())
     }
 
+    private func loadSortOrder() {
+        if let raw = UserDefaults.standard.string(forKey: sortOrderKey), let order = EpisodeSortOrder(rawValue: raw) {
+            sortOrder = order
+        }
+    }
+
+    private func saveSortOrder() {
+        UserDefaults.standard.set(sortOrder.rawValue, forKey: sortOrderKey)
+    }
+
     private func load() async {
         isLoading = true
         errorMessage = nil
         offset = 0
         hasMore = true
         do {
-            let page = try await PodimoAPI.shared.getEpisodes(podcastId: podcast.id, limit: pageSize, offset: 0)
+            let page = try await PodimoAPI.shared.getEpisodes(podcastId: podcast.id, limit: pageSize, offset: 0, sorting: sortOrder.rawValue)
             episodes = page
             offset = page.count
             hasMore = page.count == pageSize
@@ -108,7 +158,7 @@ struct PodcastDetailView: View {
         guard !isLoadingMore, !isLoading, hasMore else { return }
         isLoadingMore = true
         do {
-            let page = try await PodimoAPI.shared.getEpisodes(podcastId: podcast.id, limit: pageSize, offset: offset)
+            let page = try await PodimoAPI.shared.getEpisodes(podcastId: podcast.id, limit: pageSize, offset: offset, sorting: sortOrder.rawValue)
             let existingIds = Set(episodes.map(\.id))
             episodes.append(contentsOf: page.filter { !existingIds.contains($0.id) })
             offset += page.count

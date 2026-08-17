@@ -109,10 +109,23 @@ final class PodimoAPI: @unchecked Sendable {
         return podcastEntries + audiobookEntries
     }
 
-    func getEpisodes(podcastId: String, limit: Int = 50, offset: Int = 0) async throws -> [Episode] {
-        let data = try await perform(operationName: "PodcastEpisodesResultsQuery", query: GraphQLQueries.episodes, variables: ["podcastId": podcastId, "limit": limit, "offset": offset, "sorting": "PUBLISHED_DESCENDING"])
+    func getEpisodes(podcastId: String, limit: Int = 50, offset: Int = 0, sorting: String = "PUBLISHED_DESCENDING") async throws -> [Episode] {
+        let data = try await perform(operationName: "PodcastEpisodesResultsQuery", query: GraphQLQueries.episodes, variables: ["podcastId": podcastId, "limit": limit, "offset": offset, "sorting": sorting])
         let list = data["podcastEpisodes"] as? [[String: Any]] ?? []
         return list.compactMap { Episode(dict: $0) }
+    }
+
+    func search(query: String, region: String, limit: Int = 10) async throws -> (podcasts: [Podcast], audiobooks: [Audiobook]) {
+        let data = try await perform(
+            operationName: "Search",
+            query: GraphQLQueries.search,
+            variables: ["searchParams": ["query": query, "limit": limit, "region": region]]
+        )
+        let podcastsList = data["searchPodcasts"] as? [[String: Any]] ?? []
+        let audiobooksList = data["searchAudiobooks"] as? [[String: Any]] ?? []
+        let podcasts = podcastsList.compactMap { Podcast(dict: $0) }
+        let audiobooks = audiobooksList.compactMap { Audiobook(dict: $0) }
+        return (podcasts, audiobooks)
     }
 
     func getEpisodesFollowed(limit: Int = 20) async throws -> [Episode] {

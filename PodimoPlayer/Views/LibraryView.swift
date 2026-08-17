@@ -167,7 +167,7 @@ struct LibraryView: View {
     }
 }
 
-private struct SectionHeader: View {
+struct SectionHeader: View {
     let title: String
     let subtitle: String
 
@@ -180,7 +180,7 @@ private struct SectionHeader: View {
     }
 }
 
-private struct ExpandButton: View {
+struct ExpandButton: View {
     let isExpanded: Bool
     let collapsedLabel: String
     let expandedLabel: String
@@ -197,7 +197,7 @@ private struct ExpandButton: View {
     }
 }
 
-private struct CollapsibleGridSection<Item: Identifiable, ItemView: View>: View {
+struct CollapsibleGridSection<Item: Identifiable, ItemView: View>: View {
     let title: String
     let items: [Item]
     let collapsedCount: Int
@@ -234,7 +234,7 @@ private struct CollapsibleGridSection<Item: Identifiable, ItemView: View>: View 
     }
 }
 
-private struct LibraryCardBody: View {
+struct LibraryCardBody: View {
     let imageUrl: String?
     let title: String
     let subtitle: String

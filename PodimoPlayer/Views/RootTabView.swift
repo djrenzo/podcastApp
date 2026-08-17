@@ -10,6 +10,8 @@ struct RootTabView: View {
             TabView {
                 LibraryView()
                     .tabItem { Label("Library", systemImage: "square.stack.fill") }
+                SearchView()
+                    .tabItem { Label("Search", systemImage: "magnifyingglass") }
                 DownloadsView()
                     .tabItem { Label("Downloads", systemImage: "arrow.down.circle.fill") }
                 SettingsView()

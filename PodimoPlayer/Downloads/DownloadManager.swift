@@ -10,6 +10,8 @@ struct DownloadRecord: Codable, Identifiable, Equatable {
     var imageUrl: String?
     var isVideo: Bool
     var localPath: String
+    var isAudiobook = false
+    var chapters: [AudiobookChapter] = []
 
     var id: String { episodeId }
 }
@@ -27,6 +29,10 @@ final class DownloadManager: NSObject, @unchecked Sendable {
 
     private(set) var states: [String: DownloadState] = [:]
     private(set) var records: [DownloadRecord] = []
+    /// Metadata for downloads that are currently in flight (or just failed),
+    /// keyed by episode id — `states`/`records` alone don't carry enough to
+    /// render a row (title, artwork, ...) for something not finished yet.
+    private(set) var downloadingEpisodes: [String: Episode] = [:]
 
     private let recordsKey = "podimo_downloads"
     @ObservationIgnored private let plainSession = URLSession(configuration: .default)
@@ -56,6 +62,7 @@ final class DownloadManager: NSObject, @unchecked Sendable {
         guard let url = URL(string: mediaURLString) else { return }
         let isHLS = url.pathExtension.lowercased() == "m3u8" || mediaURLString.contains(".m3u8")
         states[episode.id] = .downloading(0)
+        downloadingEpisodes[episode.id] = episode
         if isHLS {
             startHLSDownload(episode: episode, url: url)
         } else {
@@ -68,6 +75,7 @@ final class DownloadManager: NSObject, @unchecked Sendable {
         try? FileManager.default.removeItem(atPath: record.localPath)
         records.removeAll { $0.episodeId == episodeId }
         states[episodeId] = .notDownloaded
+        downloadingEpisodes[episodeId] = nil
         persistRecords()
     }
 
@@ -102,10 +110,11 @@ final class DownloadManager: NSObject, @unchecked Sendable {
                 try FileManager.default.removeItem(at: destination)
             }
             try FileManager.default.moveItem(at: tempURL, to: destination)
-            let record = DownloadRecord(episodeId: episode.id, podcastId: episode.podcastId, title: episode.title, podcastName: episode.podcastName, imageUrl: episode.imageUrl, isVideo: episode.hasVideo, localPath: destination.path)
+            let record = DownloadRecord(episodeId: episode.id, podcastId: episode.podcastId, title: episode.title, podcastName: episode.podcastName, imageUrl: episode.imageUrl, isVideo: episode.hasVideo, localPath: destination.path, isAudiobook: episode.isAudiobook, chapters: episode.chapters)
             records.removeAll { $0.episodeId == episode.id }
             records.append(record)
             states[episode.id] = .completed
+            downloadingEpisodes[episode.id] = nil
             persistRecords()
         } catch {
             states[episode.id] = .failed(error.localizedDescription)
@@ -163,10 +172,11 @@ extension DownloadManager: AVAssetDownloadDelegate {
     func urlSession(_ session: URLSession, assetDownloadTask: AVAssetDownloadTask, didFinishDownloadingTo location: URL) {
         guard let (episode, _) = assetTaskEpisodes[assetDownloadTask.taskIdentifier] else { return }
         Task { @MainActor in
-            let record = DownloadRecord(episodeId: episode.id, podcastId: episode.podcastId, title: episode.title, podcastName: episode.podcastName, imageUrl: episode.imageUrl, isVideo: episode.hasVideo, localPath: location.path)
+            let record = DownloadRecord(episodeId: episode.id, podcastId: episode.podcastId, title: episode.title, podcastName: episode.podcastName, imageUrl: episode.imageUrl, isVideo: episode.hasVideo, localPath: location.path, isAudiobook: episode.isAudiobook, chapters: episode.chapters)
             self.records.removeAll { $0.episodeId == episode.id }
             self.records.append(record)
             self.states[episode.id] = .completed
+            self.downloadingEpisodes[episode.id] = nil
             self.persistRecords()
         }
     }

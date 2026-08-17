@@ -74,6 +74,14 @@ struct Episode: Identifiable, Equatable {
 
     var publishedDate: Date? {
         guard let publishDatetime else { return nil }
+        // Podimo's timestamps include milliseconds (e.g. "...T04:00:00.000Z"),
+        // which the default ISO8601DateFormatter options don't parse — it
+        // silently returns nil, so this was never actually reaching the UI.
+        let withFractionalSeconds = ISO8601DateFormatter()
+        withFractionalSeconds.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFractionalSeconds.date(from: publishDatetime) {
+            return date
+        }
         return ISO8601DateFormatter().date(from: publishDatetime)
     }
 

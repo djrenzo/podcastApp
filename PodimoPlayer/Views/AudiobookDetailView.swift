@@ -11,6 +11,7 @@ struct AudiobookDetailView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var playback = PlaybackManager.shared
+    @State private var downloads = DownloadManager.shared
 
     var body: some View {
         ScrollView {
@@ -61,15 +62,19 @@ struct AudiobookDetailView: View {
                 }
             }
             if let detail {
-                Button {
-                    play(detail)
-                } label: {
-                    Label(isCurrentlyPlaying(detail) ? "Playing" : "Play", systemImage: isCurrentlyPlaying(detail) ? "waveform" : "play.fill")
-                        .frame(maxWidth: .infinity)
+                HStack(spacing: 12) {
+                    Button {
+                        play(detail)
+                    } label: {
+                        Label(isCurrentlyPlaying(detail) ? "Playing" : "Play", systemImage: isCurrentlyPlaying(detail) ? "waveform" : "play.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.podimoPurple)
+                    .disabled(detail.playableURLString == nil)
+
+                    downloadButton(for: detail)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.podimoPurple)
-                .disabled(detail.playableURLString == nil)
             }
         }
         .padding(20)
@@ -120,8 +125,7 @@ struct AudiobookDetailView: View {
         playback.currentEpisode?.id == detail.id && playback.isPlaying
     }
 
-    private func play(_ detail: AudiobookDetail) {
-        guard let urlString = detail.playableURLString, let url = URL(string: urlString) else { return }
+    private func episodeForPlayback(_ detail: AudiobookDetail) -> Episode? {
         guard var episode = Episode(dict: [
             "id": detail.id,
             "podcastId": detail.id,
@@ -131,10 +135,63 @@ struct AudiobookDetailView: View {
             "hasVideo": false,
             "duration": detail.duration as Any,
             "userProgress": ["listenTime": detail.userProgress?.listenTime as Any]
-        ]) else { return }
+        ]) else { return nil }
         episode.chapters = chapters
         episode.isAudiobook = true
+        return episode
+    }
+
+    private func play(_ detail: AudiobookDetail) {
+        guard let episode = episodeForPlayback(detail) else { return }
+        // Prefer a downloaded copy over the network — same as everywhere else
+        // an audiobook or episode can be started from (Keep Listening,
+        // podcast episode lists).
+        if let record = DownloadManager.shared.record(for: episode.id) {
+            PlaybackCoordinator.shared.playLocal(episode: episode, url: URL(fileURLWithPath: record.localPath))
+            return
+        }
+        guard let urlString = detail.playableURLString, let url = URL(string: urlString) else { return }
         PlaybackManager.shared.play(episode: episode, audioURL: url)
+    }
+
+    private func startDownload(_ detail: AudiobookDetail) {
+        guard let episode = episodeForPlayback(detail), let urlString = detail.playableURLString else { return }
+        downloads.startDownload(episode: episode, mediaURLString: urlString)
+    }
+
+    @ViewBuilder
+    private func downloadButton(for detail: AudiobookDetail) -> some View {
+        switch downloads.state(for: detail.id) {
+        case .notDownloaded:
+            Button {
+                startDownload(detail)
+            } label: {
+                Image(systemName: "arrow.down.circle")
+                    .font(.title2)
+            }
+            .foregroundStyle(Color.podimoPurple)
+            .disabled(detail.playableURLString == nil)
+        case .downloading(let progress):
+            ProgressView(value: progress)
+                .progressViewStyle(.circular)
+                .tint(Color.podimoPurple)
+                .frame(width: 24, height: 24)
+        case .completed:
+            Image(systemName: "checkmark.circle.fill")
+                .font(.title2)
+                .foregroundStyle(Color.podimoMint)
+                .onTapGesture {
+                    downloads.deleteDownload(episodeId: detail.id)
+                }
+        case .failed:
+            Button {
+                startDownload(detail)
+            } label: {
+                Image(systemName: "exclamationmark.arrow.circlepath")
+                    .font(.title2)
+            }
+            .foregroundStyle(Color.podimoCoral)
+        }
     }
 
     private func load() async {
