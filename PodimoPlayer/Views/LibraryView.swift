@@ -1,11 +1,34 @@
 import SwiftUI
 
+enum PodcastSortOrder: String, CaseIterable {
+    case dateFollowed = "DATE_FOLLOWED"
+    case newestEpisode = "NEWEST_EPISODE"
+    case title = "TITLE"
+
+    var label: String {
+        switch self {
+        case .dateFollowed: return "Date Followed"
+        case .newestEpisode: return "Newest Episodes"
+        case .title: return "Alphabetical"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .dateFollowed: return "person.crop.circle.badge.checkmark"
+        case .newestEpisode: return "sparkles"
+        case .title: return "textformat.abc"
+        }
+    }
+}
+
 struct LibraryView: View {
     @State private var entries: [LibraryEntry] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var progressStore = ListeningProgressStore.shared
     @State private var keepListeningExpanded = false
+    @State private var podcastSortOrder: PodcastSortOrder = .dateFollowed
     private let credentials = CredentialsStore.shared
 
     private var podcasts: [Podcast] {
@@ -145,6 +168,8 @@ struct LibraryView: View {
                     LibraryCardBody(imageUrl: podcast.imageUrl, title: podcast.title, subtitle: podcast.authorName ?? "", badge: podcast.hasVideo)
                 }
                 .buttonStyle(.plain)
+            } accessory: {
+                podcastSortButton
             }
             CollapsibleGridSection(title: "Audiobooks", items: audiobooks, collapsedCount: 6, isLoading: isLoading && entries.isEmpty, emptyMessage: "No audiobooks in your library yet.") { book in
                 NavigationLink(value: AudiobookLink(id: book.id, title: book.title, imageUrl: book.imageUrl)) {
@@ -153,6 +178,29 @@ struct LibraryView: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    private var podcastSortButton: some View {
+        Menu {
+            ForEach(PodcastSortOrder.allCases, id: \.self) { order in
+                Button {
+                    guard order != podcastSortOrder else { return }
+                    podcastSortOrder = order
+                    Task { await load() }
+                } label: {
+                    Label(order.label, systemImage: order.icon)
+                    if order == podcastSortOrder {
+                        Image(systemName: "checkmark")
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "arrow.up.arrow.down.circle")
+                .font(.subheadline)
+                .foregroundStyle(Color.podimoPurple)
+                .padding(.leading, 6)
+        }
+        .disabled(isLoading)
     }
 
     private func loadIfNeeded() async {
@@ -165,7 +213,7 @@ struct LibraryView: View {
         isLoading = true
         errorMessage = nil
         do {
-            entries = try await PodimoAPI.shared.getLibrary()
+            entries = try await PodimoAPI.shared.getLibrary(podcastsSorting: podcastSortOrder.rawValue)
         } catch {
             // .refreshable's own task lifecycle can cancel the in-flight
             // request out from under it (e.g. superseded by another pull) —
@@ -217,14 +265,33 @@ struct ExpandButton: View {
     }
 }
 
-struct CollapsibleGridSection<Item: Identifiable, ItemView: View>: View {
+struct CollapsibleGridSection<Item: Identifiable, ItemView: View, Accessory: View>: View {
     let title: String
     let items: [Item]
     let collapsedCount: Int
     let isLoading: Bool
     let emptyMessage: String
     @ViewBuilder let itemView: (Item) -> ItemView
+    @ViewBuilder let accessory: () -> Accessory
     @State private var expanded = false
+
+    init(
+        title: String,
+        items: [Item],
+        collapsedCount: Int,
+        isLoading: Bool,
+        emptyMessage: String,
+        @ViewBuilder itemView: @escaping (Item) -> ItemView,
+        @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }
+    ) {
+        self.title = title
+        self.items = items
+        self.collapsedCount = collapsedCount
+        self.isLoading = isLoading
+        self.emptyMessage = emptyMessage
+        self.itemView = itemView
+        self.accessory = accessory
+    }
 
     private var visibleItems: [Item] {
         expanded ? items : Array(items.prefix(collapsedCount))
@@ -232,7 +299,12 @@ struct CollapsibleGridSection<Item: Identifiable, ItemView: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: title, subtitle: "\(items.count)")
+            HStack(alignment: .firstTextBaseline) {
+                Text(title).font(.title3.bold()).foregroundStyle(Color.podimoInk)
+                Spacer()
+                Text("\(items.count)").font(.caption).foregroundStyle(.secondary)
+                accessory()
+            }
             if isLoading {
                 ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
             } else if items.isEmpty {

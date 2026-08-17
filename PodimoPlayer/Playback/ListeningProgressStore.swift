@@ -50,6 +50,25 @@ final class ListeningProgressStore: @unchecked Sendable {
         completedEpisodeIds.contains(episodeId)
     }
 
+    /// Local data always takes precedence over the API — a locally-finished
+    /// episode stays finished even if the API never got told (it's dropped
+    /// from `records` once done, so that check has to come first or a stale
+    /// "still in progress" API value would leak back through below), then an
+    /// in-progress local record, then finally whatever the API last reported.
+    func effectiveProgress(for episode: Episode) -> EpisodeProgress? {
+        if isCompleted(episodeId: episode.id) {
+            return EpisodeProgress(progress: 1.0, listenTime: episode.duration)
+        }
+        if let record = records.first(where: { $0.episodeId == episode.id }) {
+            return EpisodeProgress(progress: record.progress, listenTime: record.listenTime)
+        }
+        return episode.userProgress
+    }
+
+    func isWatched(_ episode: Episode) -> Bool {
+        episode.isMarkedAsPlayed || (effectiveProgress(for: episode)?.progress ?? 0) >= 0.95
+    }
+
     func update(episode: Episode, currentTime: Double, duration: Double) {
         guard duration > 0, currentTime.isFinite, duration.isFinite else { return }
         let progress = min(max(currentTime / duration, 0), 1)

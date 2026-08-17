@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum EpisodeWatchFilter: String, CaseIterable {
+    case all = "All Episodes"
+    case unwatched = "Only Unwatched"
+}
+
 enum EpisodeSortOrder: String {
     case descending = "PUBLISHED_DESCENDING"
     case ascending = "PUBLISHED_ASCENDING"
@@ -26,30 +31,50 @@ struct PodcastDetailView: View {
     @State private var offset = 0
     @State private var hasMore = true
     @State private var sortOrder: EpisodeSortOrder = .descending
+    @State private var watchFilter: EpisodeWatchFilter = .all
+    @State private var progressStore = ListeningProgressStore.shared
 
     private let pageSize = 50
     private var sortOrderKey: String { "podimo_episode_sort_\(podcast.id)" }
+
+    /// Filtered client-side — the episode list API has no "unwatched" filter
+    /// of its own, and "watched" already depends on merging local progress
+    /// data on top of whatever the API reports (see ListeningProgressStore).
+    private var filteredEpisodes: [Episode] {
+        switch watchFilter {
+        case .all: return episodes
+        case .unwatched: return episodes.filter { !progressStore.isWatched($0) }
+        }
+    }
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
                 header
+                if !episodes.isEmpty {
+                    filterPicker
+                }
                 if let errorMessage {
                     Text(errorMessage).foregroundStyle(.secondary).padding(.horizontal, 20)
                 } else if isLoading && episodes.isEmpty {
                     ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
                 } else {
-                    ForEach(episodes) { episode in
+                    ForEach(filteredEpisodes) { episode in
                         EpisodeRow(episode: episode)
                             .padding(.horizontal, 20)
                             .onAppear {
-                                if episode.id == episodes.last?.id {
+                                if episode.id == filteredEpisodes.last?.id {
                                     Task { await loadMore() }
                                 }
                             }
                     }
                     if isLoadingMore {
                         ProgressView().frame(maxWidth: .infinity).padding(.vertical, 20)
+                    }
+                    if filteredEpisodes.isEmpty && !episodes.isEmpty {
+                        Text("No unwatched episodes.")
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 20)
                     }
                 }
             }
@@ -89,9 +114,6 @@ struct PodcastDetailView: View {
 
     private var metaChips: some View {
         HStack(spacing: 8) {
-            if podcast.hasVideo {
-                metaChip(icon: "video.fill", text: "Video")
-            }
             if podcast.isFollowing == true {
                 metaChip(icon: "checkmark", text: "Following")
             }
@@ -101,6 +123,16 @@ struct PodcastDetailView: View {
             Spacer()
             sortButton
         }
+    }
+
+    private var filterPicker: some View {
+        Picker("Filter", selection: $watchFilter) {
+            ForEach(EpisodeWatchFilter.allCases, id: \.self) { filter in
+                Text(filter.rawValue).tag(filter)
+            }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 20)
     }
 
     private var sortButton: some View {

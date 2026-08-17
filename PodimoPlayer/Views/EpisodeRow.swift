@@ -16,19 +16,8 @@ struct EpisodeRow: View {
 
     private var downloadState: DownloadState { downloads.state(for: episode.id) }
 
-    /// Local data always takes precedence over the API — a locally-finished
-    /// episode stays finished even if the API never got told (it's dropped
-    /// from `records` once done, so that check has to come first or a stale
-    /// "still in progress" API value would leak back through below), then an
-    /// in-progress local record, then finally whatever the API last reported.
     private var effectiveProgress: EpisodeProgress? {
-        if progressStore.isCompleted(episodeId: episode.id) {
-            return EpisodeProgress(progress: 1.0, listenTime: episode.duration)
-        }
-        if let record = progressStore.records.first(where: { $0.episodeId == episode.id }) {
-            return EpisodeProgress(progress: record.progress, listenTime: record.listenTime)
-        }
-        return episode.userProgress
+        progressStore.effectiveProgress(for: episode)
     }
 
     private var playableEpisode: Episode {
@@ -38,7 +27,7 @@ struct EpisodeRow: View {
     }
 
     private var isCompleted: Bool {
-        episode.isMarkedAsPlayed || (effectiveProgress?.progress ?? 0) >= 0.95
+        progressStore.isWatched(episode)
     }
 
     /// For audiobooks (only ever shown here via Keep Listening), lead with
