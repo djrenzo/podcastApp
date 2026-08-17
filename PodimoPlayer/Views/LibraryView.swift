@@ -160,7 +160,7 @@ struct LibraryView: View {
         await load()
     }
 
-    private func load(retryOnCancel: Bool = true) async {
+    private func load(attempt: Int = 0) async {
         guard credentials.hasCredentials else { return }
         isLoading = true
         errorMessage = nil
@@ -170,10 +170,15 @@ struct LibraryView: View {
             // .refreshable's own task lifecycle can cancel the in-flight
             // request out from under it (e.g. superseded by another pull) —
             // that's not a real failure (retrying always just works), so
-            // don't surface a scary "cancelled" alert for it. Retry once,
-            // silently, instead.
-            if retryOnCancel, (error as? URLError)?.code == .cancelled {
-                await load(retryOnCancel: false)
+            // don't surface a scary "cancelled" alert for it. The retry has
+            // to run as a genuinely new Task, not a nested `await` here:
+            // cancellation propagates down through awaits within the same
+            // task tree, so calling load() inline from inside this already-
+            // cancelled task would just get cancelled again immediately,
+            // before the request even started.
+            if (error as? URLError)?.code == .cancelled, attempt < 2 {
+                isLoading = false
+                Task { await load(attempt: attempt + 1) }
                 return
             }
             errorMessage = error.localizedDescription
