@@ -28,7 +28,7 @@ struct LibraryView: View {
     @State private var errorMessage: String?
     @State private var progressStore = ListeningProgressStore.shared
     @State private var keepListeningExpanded = false
-    @State private var podcastSortOrder: PodcastSortOrder = .dateFollowed
+    @State private var podcastSortOrder: PodcastSortOrder = .newestEpisode
     private let credentials = CredentialsStore.shared
 
     private var podcasts: [Podcast] {

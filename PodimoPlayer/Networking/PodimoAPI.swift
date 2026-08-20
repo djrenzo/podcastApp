@@ -96,7 +96,7 @@ final class PodimoAPI: @unchecked Sendable {
         }
     }
 
-    func getLibrary(podcastsSorting: String = "DATE_FOLLOWED") async throws -> [LibraryEntry] {
+    func getLibrary(podcastsSorting: String = "NEWEST_EPISODE") async throws -> [LibraryEntry] {
         let data = try await perform(
             operationName: "LibrarySavedItemsResultsQuery",
             query: GraphQLQueries.library,

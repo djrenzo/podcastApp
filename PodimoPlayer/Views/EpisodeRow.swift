@@ -13,6 +13,7 @@ struct EpisodeRow: View {
     @State private var coordinator = PlaybackCoordinator.shared
     @State private var progressStore = ListeningProgressStore.shared
     @State private var isResolvingDownloadURL = false
+    @State private var showInfo = false
 
     private var downloadState: DownloadState { downloads.state(for: episode.id) }
 
@@ -130,6 +131,11 @@ struct EpisodeRow: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
+            Button {
+                showInfo = true
+            } label: {
+                Label("Information", systemImage: "info.circle")
+            }
             ForEach(doneActions) { action in
                 Button {
                     action.action()
@@ -137,6 +143,9 @@ struct EpisodeRow: View {
                     Label(action.title, systemImage: action.icon)
                 }
             }
+        }
+        .sheet(isPresented: $showInfo) {
+            EpisodeInfoSheet(episode: playableEpisode)
         }
     }
 

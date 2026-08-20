@@ -30,6 +30,7 @@ final class PlaybackManager: @unchecked Sendable {
     private var artwork: MPMediaItemArtwork?
     private var artworkTask: Task<Void, Never>?
     private let rateKey = "podimo_playback_rate"
+    private var wasPlayingBeforeInterruption = false
 
     private init() {
         let storedRate = UserDefaults.standard.float(forKey: rateKey)
@@ -58,6 +59,44 @@ final class PlaybackManager: @unchecked Sendable {
     private func configureAudioSession() {
         try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
         try? AVAudioSession.sharedInstance().setActive(true)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioSessionInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+    }
+
+    /// The system auto-pauses playback for things like a Siri notification
+    /// readout over AirPods, but never auto-resumes it afterward — that part
+    /// is on us. AVAudioSession can post this notification off the main
+    /// thread, so hop explicitly rather than trusting the delivery thread
+    /// (same reasoning as the MPRemoteCommandCenter handlers above).
+    @objc private func handleAudioSessionInterruption(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+
+        switch type {
+        case .began:
+            DispatchQueue.main.async {
+                self.wasPlayingBeforeInterruption = self.isPlaying
+                self.isPlaying = false
+            }
+        case .ended:
+            let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt
+            let shouldResume = optionsValue.map { AVAudioSession.InterruptionOptions(rawValue: $0).contains(.shouldResume) } ?? false
+            DispatchQueue.main.async {
+                defer { self.wasPlayingBeforeInterruption = false }
+                guard self.wasPlayingBeforeInterruption, shouldResume else { return }
+                try? AVAudioSession.sharedInstance().setActive(true)
+                self.player?.rate = self.playbackRate
+                self.isPlaying = true
+                self.updateNowPlayingInfo()
+            }
+        @unknown default:
+            break
+        }
     }
 
     /// Starts playback of a new episode. Video episodes always start on the

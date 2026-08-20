@@ -33,6 +33,7 @@ struct PodcastDetailView: View {
     @State private var sortOrder: EpisodeSortOrder = .descending
     @State private var watchFilter: EpisodeWatchFilter = .all
     @State private var progressStore = ListeningProgressStore.shared
+    @State private var showFullDescription = false
 
     private let pageSize = 50
     private var sortOrderKey: String { "podimo_episode_sort_\(podcast.id)" }
@@ -87,6 +88,25 @@ struct PodcastDetailView: View {
             loadSortOrder()
             await load()
         }
+        .sheet(isPresented: $showFullDescription) {
+            NavigationStack {
+                ScrollView {
+                    Text(podcast.description ?? "")
+                        .font(.body)
+                        .foregroundStyle(Color.podimoInk)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(20)
+                }
+                .background(Color.podimoBackground)
+                .navigationTitle(podcast.title)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") { showFullDescription = false }
+                    }
+                }
+            }
+        }
     }
 
     private var header: some View {
@@ -106,7 +126,12 @@ struct PodcastDetailView: View {
             }
             metaChips
             if let description = podcast.description, !description.isEmpty {
-                Text(description).font(.footnote).foregroundStyle(.secondary).lineLimit(4)
+                Text(description)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(4)
+                    .contentShape(Rectangle())
+                    .onTapGesture { showFullDescription = true }
             }
         }
         .padding(20)
