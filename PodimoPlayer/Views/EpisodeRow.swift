@@ -22,7 +22,12 @@ struct EpisodeRow: View {
     @State private var queueManager = EpisodeQueueManager.shared
     @State private var isResolvingDownloadURL = false
     @State private var showInfo = false
-    @State private var showPodcast = false
+    /// Pushed onto the enclosing NavigationStack (not presented as a sheet),
+    /// so "Information"/"Podcast" from a context menu land on the exact same
+    /// screen — back button, further navigation (e.g. an audiobook's related
+    /// books) and all — as tapping into it normally from the Library would.
+    @State private var navigateToAudiobook: AudiobookLink?
+    @State private var navigateToPodcast: Podcast?
 
     private var downloadState: DownloadState { downloads.state(for: episode.id) }
 
@@ -71,6 +76,13 @@ struct EpisodeRow: View {
             return [
                 SwipeDoneAction(title: "Mark as Done", icon: "checkmark.circle.fill") {
                     ListeningProgressStore.shared.markAsDone(episodeId: episode.id)
+                    // If this episode had a saved "up next" (e.g. it was
+                    // played from a podcast list, or resumed from here with
+                    // one restored), hand its Keep Listening slot off to that
+                    // next episode instead of just leaving it empty.
+                    if let next = queueManager.advance(past: episode.id) {
+                        ListeningProgressStore.shared.startTracking(next)
+                    }
                 }
             ]
         }
@@ -156,13 +168,17 @@ struct EpisodeRow: View {
         .buttonStyle(.plain)
         .contextMenu {
             Button {
-                showInfo = true
+                if episode.isAudiobook {
+                    navigateToAudiobook = AudiobookLink(id: episode.id, title: episode.title, imageUrl: episode.imageUrl)
+                } else {
+                    showInfo = true
+                }
             } label: {
                 Label("Information", systemImage: "info.circle")
             }
             if !episode.isAudiobook {
                 Button {
-                    showPodcast = true
+                    navigateToPodcast = minimalPodcast
                 } label: {
                     Label("Podcast", systemImage: "square.stack")
                 }
@@ -188,44 +204,35 @@ struct EpisodeRow: View {
                 }
             }
         }
+        // Podcast episodes have no standalone "page" elsewhere to match, so
+        // this stays a modal info sheet. Audiobooks and podcasts do have one
+        // (AudiobookDetailView / PodcastDetailView, both reachable by tapping
+        // into the Library normally) — those push onto the enclosing
+        // NavigationStack below instead, rather than reopening in a sheet.
         .sheet(isPresented: $showInfo) {
-            if episode.isAudiobook {
-                NavigationStack {
-                    AudiobookDetailView(audiobookId: episode.id, previewTitle: episode.title, previewImageUrl: episode.imageUrl)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button("Done") { showInfo = false }
-                            }
-                        }
-                }
-            } else {
-                EpisodeInfoSheet(episode: playableEpisode)
-            }
+            EpisodeInfoSheet(episode: playableEpisode)
         }
-        .sheet(isPresented: $showPodcast) {
-            if let minimalPodcast {
-                NavigationStack {
-                    PodcastDetailView(podcast: minimalPodcast)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                Button("Done") { showPodcast = false }
-                            }
-                        }
-                }
-            }
+        .navigationDestination(item: $navigateToAudiobook) { link in
+            AudiobookDetailView(audiobookId: link.id, previewTitle: link.title, previewImageUrl: link.imageUrl)
+        }
+        .navigationDestination(item: $navigateToPodcast) { podcast in
+            PodcastDetailView(podcast: podcast)
         }
     }
 
     /// "The autoplay queue is reset on every new episode play click" — rebuilt
     /// from whatever comes after this episode in the podcast's current list
-    /// order, or cleared if that list isn't available in this context.
+    /// order. Where that list isn't available in this context (e.g. tapped
+    /// from Keep Listening) fall back to restoring whatever queue was saved
+    /// the last time this same episode was played with one, rather than just
+    /// clearing it — so resuming an episode brings its "up next" back too.
     private func resetAutoplayQueue() {
         guard let context = podcastEpisodesContext,
               let index = context.firstIndex(where: { $0.id == episode.id }) else {
-            queueManager.setAutoplayQueue([])
+            queueManager.restoreQueue(for: episode.id)
             return
         }
-        queueManager.setAutoplayQueue(Array(context[(index + 1)...]))
+        queueManager.setAutoplayQueue(Array(context[(index + 1)...]), owner: episode.id)
     }
 
     private var metaLine: String {

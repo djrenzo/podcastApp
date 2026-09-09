@@ -7,17 +7,45 @@ struct NowPlayingView: View {
     @State private var showQueue = false
     @State private var isScrubbing = false
     @State private var scrubTime: Double = 0
+    /// Tracks the physical device orientation (not the interface orientation)
+    /// so a video episode can be blown up to fill the screen the moment the
+    /// phone is turned sideways, the way a full-screen video player behaves
+    /// elsewhere. Seeded from the current orientation so a sheet opened while
+    /// already rotated starts fullscreen instead of waiting for the next turn.
+    @State private var isLandscape = UIDevice.current.orientation.isLandscape
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        Group {
+            if playback.isVideoActive, isLandscape, let player = playback.player {
+                fullscreenVideo(player: player)
+            } else {
+                portraitContent
+            }
+        }
+        .background(Color.podimoBackground.ignoresSafeArea())
+        .onAppear { UIDevice.current.beginGeneratingDeviceOrientationNotifications() }
+        .onDisappear { UIDevice.current.endGeneratingDeviceOrientationNotifications() }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            // Face-up/-down/unknown aren't real interface orientations (e.g.
+            // the phone laid flat on a table) — ignore those and keep
+            // whatever the last valid reading was, rather than flipping back
+            // out of fullscreen for no visible reason.
+            let orientation = UIDevice.current.orientation
+            guard orientation.isValidInterfaceOrientation else { return }
+            isLandscape = orientation.isLandscape
+        }
+        .sheet(isPresented: $showChapters) {
+            AudiobookChaptersView()
+        }
+        .sheet(isPresented: $showQueue) {
+            QueueView()
+        }
+    }
+
+    private var portraitContent: some View {
         VStack(spacing: 24) {
             Capsule().fill(.secondary.opacity(0.3)).frame(width: 40, height: 5).padding(.top, 8)
-                .overlay(alignment: .leading) {
-                    sleepTimerButton
-                }
-                .overlay(alignment: .trailing) {
-                    queueButton
-                }
 
             if let episode = playback.currentEpisode {
                 artworkOrVideo(for: episode)
@@ -47,17 +75,39 @@ struct NowPlayingView: View {
                     }
                 }
                 .foregroundStyle(Color.podimoInk)
+
+                HStack(spacing: 40) {
+                    sleepTimerButton
+                    queueButton
+                }
+                .padding(.top, 8)
             }
 
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .background(Color.podimoBackground.ignoresSafeArea())
-        .sheet(isPresented: $showChapters) {
-            AudiobookChaptersView()
-        }
-        .sheet(isPresented: $showQueue) {
-            QueueView()
+    }
+
+    /// Fills the entire screen edge-to-edge with the video, replacing the
+    /// whole player layout (artwork slot, transport controls, everything) —
+    /// only reachable while a video rendition is actually active, so rotating
+    /// back to portrait (or tapping to collapse to audio) always drops back
+    /// into the normal layout above.
+    private func fullscreenVideo(player: AVPlayer) -> some View {
+        ZStack(alignment: .topLeading) {
+            Color.black.ignoresSafeArea()
+            VideoPlayer(player: player)
+                .ignoresSafeArea()
+            Button {
+                playback.collapseToAudioOnly()
+            } label: {
+                Image(systemName: "headphones")
+                    .font(.title3)
+                    .foregroundStyle(.white)
+                    .padding(10)
+                    .background(.black.opacity(0.55), in: Circle())
+            }
+            .padding(20)
         }
     }
 
@@ -71,7 +121,6 @@ struct NowPlayingView: View {
                 .padding(10)
                 .background(Color.podimoCard, in: Circle())
         }
-        .padding(.trailing, 20)
     }
 
     private static let sleepTimerOptions = [5, 10, 15, 30, 45, 60]
@@ -105,7 +154,6 @@ struct NowPlayingView: View {
             .padding(10)
             .background(Color.podimoCard, in: Capsule())
         }
-        .padding(.leading, 20)
     }
 
     private func sleepTimerLabel(_ seconds: TimeInterval) -> String {

@@ -106,6 +106,36 @@ final class ListeningProgressStore: @unchecked Sendable {
         persist()
     }
 
+    /// Creates a nominal in-progress record for `episode` so it shows up in
+    /// Keep Listening immediately, even though it hasn't actually started
+    /// playing yet. Used when a queued-up episode takes over the Keep
+    /// Listening slot of the one just marked done ahead of it (see
+    /// EpisodeQueueManager.advance(past:)).
+    func startTracking(_ episode: Episode) {
+        guard !isWatched(episode) else { return }
+        unmarkCompleted(episodeId: episode.id)
+        let record = ListeningProgressRecord(
+            episodeId: episode.id,
+            podcastId: episode.podcastId,
+            podcastName: episode.podcastName,
+            title: episode.title,
+            imageUrl: episode.imageUrl,
+            hasVideo: episode.hasVideo,
+            duration: episode.duration ?? 0,
+            listenTime: 0,
+            progress: minProgress,
+            lastListenDatetime: Date(),
+            chapters: episode.chapters,
+            isAudiobook: episode.isAudiobook,
+            description: episode.description,
+            publishDatetime: episode.publishDatetime,
+            isMarkedAsPlayed: episode.isMarkedAsPlayed
+        )
+        records.removeAll { $0.episodeId == episode.id }
+        records.append(record)
+        persist()
+    }
+
     func remove(episodeId: String) {
         guard records.contains(where: { $0.episodeId == episodeId }) else { return }
         records.removeAll { $0.episodeId == episodeId }
