@@ -9,11 +9,20 @@ struct SwipeDoneAction: Identifiable {
 
 struct EpisodeRow: View {
     let episode: Episode
+    /// The full, currently-sorted episode list for this episode's podcast —
+    /// passed only where that context is actually available (PodcastDetailView).
+    /// Used solely to rebuild the autoplay queue ("the next episodes in line")
+    /// when this episode is played; nil elsewhere (e.g. Keep Listening) just
+    /// means the autoplay queue resets to empty instead, since there's no
+    /// ordered list to draw "next" from there.
+    var podcastEpisodesContext: [Episode]? = nil
     @State private var downloads = DownloadManager.shared
     @State private var coordinator = PlaybackCoordinator.shared
     @State private var progressStore = ListeningProgressStore.shared
+    @State private var queueManager = EpisodeQueueManager.shared
     @State private var isResolvingDownloadURL = false
     @State private var showInfo = false
+    @State private var showPodcast = false
 
     private var downloadState: DownloadState { downloads.state(for: episode.id) }
 
@@ -29,6 +38,20 @@ struct EpisodeRow: View {
 
     private var isCompleted: Bool {
         progressStore.isWatched(episode)
+    }
+
+    /// A minimal reconstruction of this episode's podcast, for the "Podcast"
+    /// context menu action — Keep Listening only ever has the episode's own
+    /// denormalized podcastId/podcastName/imageUrl on hand, not the full
+    /// Podcast the API would otherwise return. `Podcast.init?(dict:)` reads
+    /// the image from a nested `images.coverImageUrl`, not a top-level key.
+    private var minimalPodcast: Podcast? {
+        Podcast(dict: [
+            "id": episode.podcastId,
+            "title": episode.podcastName,
+            "hasVideo": episode.hasVideo,
+            "images": ["coverImageUrl": episode.imageUrl as Any]
+        ])
     }
 
     /// For audiobooks (only ever shown here via Keep Listening), lead with
@@ -84,6 +107,7 @@ struct EpisodeRow: View {
             if episode.isAudiobook {
                 coordinator.playAudiobook(episode: playableEpisode)
             } else {
+                resetAutoplayQueue()
                 coordinator.play(episode: playableEpisode)
             }
         } label: {
@@ -136,6 +160,26 @@ struct EpisodeRow: View {
             } label: {
                 Label("Information", systemImage: "info.circle")
             }
+            if !episode.isAudiobook {
+                Button {
+                    showPodcast = true
+                } label: {
+                    Label("Podcast", systemImage: "square.stack")
+                }
+                Button {
+                    if queueManager.isInManualQueue(episode.id) {
+                        queueManager.removeFromManualQueue(episodeId: episode.id)
+                    } else {
+                        queueManager.addToManualQueue(playableEpisode)
+                    }
+                } label: {
+                    if queueManager.isInManualQueue(episode.id) {
+                        Label("Remove from Queue", systemImage: "text.badge.minus")
+                    } else {
+                        Label("Add to Queue", systemImage: "text.badge.plus")
+                    }
+                }
+            }
             ForEach(doneActions) { action in
                 Button {
                     action.action()
@@ -145,8 +189,43 @@ struct EpisodeRow: View {
             }
         }
         .sheet(isPresented: $showInfo) {
-            EpisodeInfoSheet(episode: playableEpisode)
+            if episode.isAudiobook {
+                NavigationStack {
+                    AudiobookDetailView(audiobookId: episode.id, previewTitle: episode.title, previewImageUrl: episode.imageUrl)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Done") { showInfo = false }
+                            }
+                        }
+                }
+            } else {
+                EpisodeInfoSheet(episode: playableEpisode)
+            }
         }
+        .sheet(isPresented: $showPodcast) {
+            if let minimalPodcast {
+                NavigationStack {
+                    PodcastDetailView(podcast: minimalPodcast)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button("Done") { showPodcast = false }
+                            }
+                        }
+                }
+            }
+        }
+    }
+
+    /// "The autoplay queue is reset on every new episode play click" — rebuilt
+    /// from whatever comes after this episode in the podcast's current list
+    /// order, or cleared if that list isn't available in this context.
+    private func resetAutoplayQueue() {
+        guard let context = podcastEpisodesContext,
+              let index = context.firstIndex(where: { $0.id == episode.id }) else {
+            queueManager.setAutoplayQueue([])
+            return
+        }
+        queueManager.setAutoplayQueue(Array(context[(index + 1)...]))
     }
 
     private var metaLine: String {

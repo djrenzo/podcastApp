@@ -151,9 +151,12 @@ struct LibraryView: View {
             "podcastId": record.podcastId,
             "podcastName": record.podcastName,
             "title": record.title,
+            "description": record.description as Any,
+            "publishDatetime": record.publishDatetime as Any,
             "imageUrl": record.imageUrl as Any,
             "hasVideo": record.hasVideo,
             "duration": record.duration,
+            "isMarkedAsPlayed": record.isMarkedAsPlayed,
             "userProgress": ["progress": record.progress, "listenTime": record.listenTime]
         ]) else { return nil }
         episode.chapters = record.chapters

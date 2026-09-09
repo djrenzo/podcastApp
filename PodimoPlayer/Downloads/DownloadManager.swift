@@ -14,6 +14,9 @@ struct DownloadRecord: Codable, Identifiable, Equatable {
     var localPath: String
     var isAudiobook = false
     var chapters: [AudiobookChapter] = []
+    var description: String?
+    var publishDatetime: String?
+    var isMarkedAsPlayed = false
 
     var id: String { episodeId }
 }
@@ -41,6 +44,9 @@ private struct PendingDownload: Codable {
     var isVideo: Bool
     var isAudiobook: Bool
     var chapters: [AudiobookChapter]
+    var description: String?
+    var publishDatetime: String?
+    var isMarkedAsPlayed: Bool
 
     init(episode: Episode) {
         episodeId = episode.id
@@ -51,6 +57,9 @@ private struct PendingDownload: Codable {
         isVideo = episode.hasVideo
         isAudiobook = episode.isAudiobook
         chapters = episode.chapters
+        description = episode.description
+        publishDatetime = episode.publishDatetime
+        isMarkedAsPlayed = episode.isMarkedAsPlayed
     }
 
     var asEpisode: Episode? {
@@ -59,8 +68,11 @@ private struct PendingDownload: Codable {
             "podcastId": podcastId,
             "podcastName": podcastName,
             "title": title,
+            "description": description as Any,
+            "publishDatetime": publishDatetime as Any,
             "imageUrl": imageUrl as Any,
-            "hasVideo": isVideo
+            "hasVideo": isVideo,
+            "isMarkedAsPlayed": isMarkedAsPlayed
         ]) else { return nil }
         episode.chapters = chapters
         episode.isAudiobook = isAudiobook
@@ -188,7 +200,10 @@ final class DownloadManager: NSObject, @unchecked Sendable {
             isVideo: pending.isVideo,
             localPath: localPath,
             isAudiobook: pending.isAudiobook,
-            chapters: pending.chapters
+            chapters: pending.chapters,
+            description: pending.description,
+            publishDatetime: pending.publishDatetime,
+            isMarkedAsPlayed: pending.isMarkedAsPlayed
         )
         records.removeAll { $0.episodeId == pending.episodeId }
         records.append(record)

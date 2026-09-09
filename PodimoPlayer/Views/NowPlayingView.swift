@@ -4,6 +4,7 @@ import AVKit
 struct NowPlayingView: View {
     @State private var playback = PlaybackManager.shared
     @State private var showChapters = false
+    @State private var showQueue = false
     @State private var isScrubbing = false
     @State private var scrubTime: Double = 0
     @Environment(\.dismiss) private var dismiss
@@ -11,6 +12,12 @@ struct NowPlayingView: View {
     var body: some View {
         VStack(spacing: 24) {
             Capsule().fill(.secondary.opacity(0.3)).frame(width: 40, height: 5).padding(.top, 8)
+                .overlay(alignment: .leading) {
+                    sleepTimerButton
+                }
+                .overlay(alignment: .trailing) {
+                    queueButton
+                }
 
             if let episode = playback.currentEpisode {
                 artworkOrVideo(for: episode)
@@ -49,6 +56,63 @@ struct NowPlayingView: View {
         .sheet(isPresented: $showChapters) {
             AudiobookChaptersView()
         }
+        .sheet(isPresented: $showQueue) {
+            QueueView()
+        }
+    }
+
+    private var queueButton: some View {
+        Button {
+            showQueue = true
+        } label: {
+            Image(systemName: "list.bullet")
+                .font(.subheadline)
+                .foregroundStyle(Color.podimoPurple)
+                .padding(10)
+                .background(Color.podimoCard, in: Circle())
+        }
+        .padding(.trailing, 20)
+    }
+
+    private static let sleepTimerOptions = [5, 10, 15, 30, 45, 60]
+
+    private var sleepTimerButton: some View {
+        Menu {
+            ForEach(Self.sleepTimerOptions, id: \.self) { minutes in
+                Button {
+                    playback.setSleepTimer(minutes: minutes)
+                } label: {
+                    Label("\(minutes) min", systemImage: "moon.zzz")
+                }
+            }
+            if playback.sleepTimerRemaining != nil {
+                Button(role: .destructive) {
+                    playback.cancelSleepTimer()
+                } label: {
+                    Label("Cancel Timer", systemImage: "xmark.circle")
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "moon.zzz")
+                if let remaining = playback.sleepTimerRemaining {
+                    Text(sleepTimerLabel(remaining))
+                        .font(.caption.monospacedDigit())
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(playback.sleepTimerRemaining != nil ? Color.podimoPurple : Color.secondary)
+            .padding(10)
+            .background(Color.podimoCard, in: Capsule())
+        }
+        .padding(.leading, 20)
+    }
+
+    private func sleepTimerLabel(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds.rounded()))
+        let m = total / 60
+        let s = total % 60
+        return String(format: "%d:%02d", m, s)
     }
 
     /// Shows the video inline, in the same slot the artwork occupies for

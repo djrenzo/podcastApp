@@ -23,6 +23,15 @@ final class PlaybackManager: @unchecked Sendable {
     static let availableRates: [Float] = [1.0, 1.5, 2.0]
     private(set) var playbackRate: Float = 1.0
 
+    /// Seconds left on the sleep timer, ticking down once a second while
+    /// active; nil when no timer is set. Wall-clock based (an end date, not a
+    /// countdown that just decrements), so it keeps counting straight through
+    /// episode changes — including an autoplay hop to the next queued episode
+    /// — and still pauses whatever happens to be playing when it expires.
+    private(set) var sleepTimerRemaining: TimeInterval?
+    private var sleepTimerEndDate: Date?
+    private var sleepTimer: Timer?
+
     var errorMessage: String?
 
     private var timeObserver: Any?
@@ -54,6 +63,41 @@ final class PlaybackManager: @unchecked Sendable {
         let rates = Self.availableRates
         let currentIndex = rates.firstIndex(of: playbackRate) ?? 0
         setPlaybackRate(rates[(currentIndex + 1) % rates.count])
+    }
+
+    /// Starts (or replaces) the sleep timer: playback auto-pauses `minutes`
+    /// from now, whatever's playing at that point.
+    func setSleepTimer(minutes: Int) {
+        guard minutes > 0 else { return }
+        sleepTimer?.invalidate()
+        let endDate = Date().addingTimeInterval(Double(minutes) * 60)
+        sleepTimerEndDate = endDate
+        sleepTimerRemaining = endDate.timeIntervalSinceNow
+        // Timer, not a periodic time observer, since this has to keep running
+        // even across a track change (it's not tied to any one AVPlayerItem).
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async { self?.tickSleepTimer() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        sleepTimer = timer
+    }
+
+    func cancelSleepTimer() {
+        sleepTimer?.invalidate()
+        sleepTimer = nil
+        sleepTimerEndDate = nil
+        sleepTimerRemaining = nil
+    }
+
+    private func tickSleepTimer() {
+        guard let sleepTimerEndDate else { return }
+        let remaining = sleepTimerEndDate.timeIntervalSinceNow
+        guard remaining > 0 else {
+            cancelSleepTimer()
+            if isPlaying { togglePlayPause() }
+            return
+        }
+        sleepTimerRemaining = remaining
     }
 
     private func configureAudioSession() {
@@ -155,9 +199,18 @@ final class PlaybackManager: @unchecked Sendable {
     }
 
     @objc private func handleDidFinish() {
-        isPlaying = false
-        if let currentEpisode {
-            ListeningProgressStore.shared.remove(episodeId: currentEpisode.id)
+        // AVPlayerItemDidPlayToEndTime is typically delivered on the main
+        // thread, but given the other notification-based crashes this app
+        // has hit off-main, hop explicitly rather than trust that.
+        DispatchQueue.main.async {
+            self.isPlaying = false
+            if let currentEpisode = self.currentEpisode {
+                ListeningProgressStore.shared.remove(episodeId: currentEpisode.id)
+            }
+            // Manual queue takes priority over the autoplay queue.
+            if let next = EpisodeQueueManager.shared.popNext() {
+                PlaybackCoordinator.shared.play(episode: next)
+            }
         }
     }
 

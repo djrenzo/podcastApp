@@ -130,8 +130,11 @@ struct DownloadsView: View {
             "podcastId": record.podcastId,
             "podcastName": record.podcastName,
             "title": record.title,
+            "description": record.description as Any,
+            "publishDatetime": record.publishDatetime as Any,
             "imageUrl": record.imageUrl as Any,
-            "hasVideo": record.isVideo
+            "hasVideo": record.isVideo,
+            "isMarkedAsPlayed": record.isMarkedAsPlayed
         ]) else { return }
         episode.chapters = record.chapters
         episode.isAudiobook = record.isAudiobook

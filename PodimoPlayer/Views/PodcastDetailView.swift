@@ -61,7 +61,7 @@ struct PodcastDetailView: View {
                     ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
                 } else {
                     ForEach(filteredEpisodes) { episode in
-                        EpisodeRow(episode: episode)
+                        EpisodeRow(episode: episode, podcastEpisodesContext: episodes)
                             .padding(.horizontal, 20)
                             .onAppear {
                                 if episode.id == filteredEpisodes.last?.id {
