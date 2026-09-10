@@ -198,6 +198,53 @@ final class PlaybackManager: @unchecked Sendable {
         updateNowPlayingInfo()
     }
 
+    /// The Now Playing "mark done" action, distinct from playing to the end.
+    /// - Podcast episode: marks it done and starts the next queued episode,
+    ///   or just stops if the queue is empty — same tail as `handleDidFinish`.
+    /// - Audiobook: completes the current chapter and jumps to the start of
+    ///   the next one; if that was the final chapter, finishes the whole book.
+    func markCurrentDoneAndAdvance() {
+        guard let episode = currentEpisode else { return }
+        if episode.isAudiobook {
+            advanceAudiobookChapter(for: episode)
+        } else {
+            player?.pause()
+            isPlaying = false
+            ListeningProgressStore.shared.markAsDone(episodeId: episode.id)
+            if let next = EpisodeQueueManager.shared.popNext() {
+                PlaybackCoordinator.shared.play(episode: next)
+            } else {
+                updateNowPlayingInfo()
+            }
+        }
+    }
+
+    private func advanceAudiobookChapter(for episode: Episode) {
+        let sorted = episode.chapters.sorted { $0.sequence < $1.sequence }
+        guard let current = episode.chapter(at: currentTime) ?? sorted.first else {
+            stopAndMarkBookDone(episode)
+            return
+        }
+        AudiobookChapterProgressStore.shared.markCompleted(episodeId: episode.id, sequence: current.sequence)
+        guard let index = sorted.firstIndex(where: { $0.sequence == current.sequence }),
+              sorted.indices.contains(index + 1) else {
+            stopAndMarkBookDone(episode)
+            return
+        }
+        let nextStart = sorted[index + 1].startTimestampInSeconds
+        seek(to: nextStart)
+        if duration > 0 {
+            ListeningProgressStore.shared.update(episode: episode, currentTime: nextStart, duration: duration)
+        }
+    }
+
+    private func stopAndMarkBookDone(_ episode: Episode) {
+        player?.pause()
+        isPlaying = false
+        ListeningProgressStore.shared.markAsDone(episodeId: episode.id)
+        updateNowPlayingInfo()
+    }
+
     @objc private func handleDidFinish() {
         // AVPlayerItemDidPlayToEndTime is typically delivered on the main
         // thread, but given the other notification-based crashes this app

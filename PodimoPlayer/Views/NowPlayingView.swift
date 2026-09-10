@@ -5,6 +5,7 @@ struct NowPlayingView: View {
     @State private var playback = PlaybackManager.shared
     @State private var showChapters = false
     @State private var showQueue = false
+    @State private var navPath = NavigationPath()
     @State private var isScrubbing = false
     @State private var scrubTime: Double = 0
     /// Tracks the physical device orientation (not the interface orientation)
@@ -16,31 +17,63 @@ struct NowPlayingView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        Group {
-            if playback.isVideoActive, isLandscape, let player = playback.player {
-                fullscreenVideo(player: player)
-            } else {
-                portraitContent
+        NavigationStack(path: $navPath) {
+            Group {
+                if playback.isVideoActive, isLandscape, let player = playback.player {
+                    fullscreenVideo(player: player)
+                } else {
+                    portraitContent
+                }
+            }
+            .background(Color.podimoBackground.ignoresSafeArea())
+            // The player screen itself has no nav bar (it's a drag-dismiss
+            // sheet); pushed detail screens bring their own, so the (i) button
+            // lands on the exact same PodcastDetailView / AudiobookDetailView,
+            // back button and all, as opening it from the Library.
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: Podcast.self) { PodcastDetailView(podcast: $0) }
+            .navigationDestination(for: AudiobookLink.self) { link in
+                AudiobookDetailView(audiobookId: link.id, previewTitle: link.title, previewImageUrl: link.imageUrl)
+            }
+            .onAppear { UIDevice.current.beginGeneratingDeviceOrientationNotifications() }
+            .onDisappear { UIDevice.current.endGeneratingDeviceOrientationNotifications() }
+            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                // Face-up/-down/unknown aren't real interface orientations (e.g.
+                // the phone laid flat on a table) — ignore those and keep
+                // whatever the last valid reading was, rather than flipping back
+                // out of fullscreen for no visible reason.
+                let orientation = UIDevice.current.orientation
+                guard orientation.isValidInterfaceOrientation else { return }
+                isLandscape = orientation.isLandscape
+            }
+            .sheet(isPresented: $showChapters) {
+                AudiobookChaptersView()
+            }
+            .sheet(isPresented: $showQueue) {
+                QueueView()
             }
         }
-        .background(Color.podimoBackground.ignoresSafeArea())
-        .onAppear { UIDevice.current.beginGeneratingDeviceOrientationNotifications() }
-        .onDisappear { UIDevice.current.endGeneratingDeviceOrientationNotifications() }
-        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-            // Face-up/-down/unknown aren't real interface orientations (e.g.
-            // the phone laid flat on a table) — ignore those and keep
-            // whatever the last valid reading was, rather than flipping back
-            // out of fullscreen for no visible reason.
-            let orientation = UIDevice.current.orientation
-            guard orientation.isValidInterfaceOrientation else { return }
-            isLandscape = orientation.isLandscape
+    }
+
+    private func openDetail() {
+        guard let episode = playback.currentEpisode else { return }
+        if episode.isAudiobook {
+            navPath.append(AudiobookLink(id: episode.id, title: episode.title, imageUrl: episode.imageUrl))
+        } else if let podcast = minimalPodcast(for: episode) {
+            navPath.append(podcast)
         }
-        .sheet(isPresented: $showChapters) {
-            AudiobookChaptersView()
-        }
-        .sheet(isPresented: $showQueue) {
-            QueueView()
-        }
+    }
+
+    /// The Now Playing episode only carries its podcast's denormalized
+    /// id/name/image, not a full Podcast — reconstruct a minimal one.
+    /// `Podcast.init?(dict:)` reads the image from a nested `images.coverImageUrl`.
+    private func minimalPodcast(for episode: Episode) -> Podcast? {
+        Podcast(dict: [
+            "id": episode.podcastId,
+            "title": episode.podcastName,
+            "hasVideo": episode.hasVideo,
+            "images": ["coverImageUrl": episode.imageUrl as Any]
+        ])
     }
 
     private var portraitContent: some View {
@@ -76,9 +109,11 @@ struct NowPlayingView: View {
                 }
                 .foregroundStyle(Color.podimoInk)
 
-                HStack(spacing: 40) {
+                HStack(spacing: 24) {
                     sleepTimerButton
                     queueButton
+                    markDoneButton
+                    infoButton
                 }
                 .padding(.top, 8)
             }
@@ -116,6 +151,32 @@ struct NowPlayingView: View {
             showQueue = true
         } label: {
             Image(systemName: "list.bullet")
+                .font(.subheadline)
+                .foregroundStyle(Color.podimoPurple)
+                .padding(10)
+                .background(Color.podimoCard, in: Circle())
+        }
+    }
+
+    /// Podcast episode: mark done + play the next queued episode.
+    /// Audiobook: mark the current chapter done + jump to the next chapter.
+    private var markDoneButton: some View {
+        Button {
+            playback.markCurrentDoneAndAdvance()
+        } label: {
+            Image(systemName: "checkmark")
+                .font(.subheadline)
+                .foregroundStyle(Color.podimoPurple)
+                .padding(10)
+                .background(Color.podimoCard, in: Circle())
+        }
+    }
+
+    private var infoButton: some View {
+        Button {
+            openDetail()
+        } label: {
+            Image(systemName: "info.circle")
                 .font(.subheadline)
                 .foregroundStyle(Color.podimoPurple)
                 .padding(10)
