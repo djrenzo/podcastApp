@@ -34,6 +34,8 @@ struct PodcastDetailView: View {
     @State private var watchFilter: EpisodeWatchFilter = .all
     @State private var progressStore = ListeningProgressStore.shared
     @State private var showFullDescription = false
+    @State private var isFollowing = false
+    @State private var isTogglingFollow = false
 
     private let pageSize = 50
     private var sortOrderKey: String { "podimo_episode_sort_\(podcast.id)" }
@@ -86,7 +88,9 @@ struct PodcastDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             loadSortOrder()
+            isFollowing = podcast.isFollowing ?? false
             await load()
+            await refreshFollowState()
         }
         .sheet(isPresented: $showFullDescription) {
             NavigationStack {
@@ -124,6 +128,7 @@ struct PodcastDetailView: View {
                     }
                 }
             }
+            followButton
             metaChips
             if let description = podcast.description, !description.isEmpty {
                 Text(description)
@@ -137,16 +142,58 @@ struct PodcastDetailView: View {
         .padding(20)
     }
 
+    private var followButton: some View {
+        Button {
+            toggleFollow()
+        } label: {
+            Label(
+                isFollowing ? "Remove from Library" : "Add to Library",
+                systemImage: isFollowing ? "checkmark.circle.fill" : "plus.circle"
+            )
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .tint(Color.podimoPurple)
+        .disabled(isTogglingFollow)
+    }
+
     private var metaChips: some View {
         HStack(spacing: 8) {
-            if podcast.isFollowing == true {
-                metaChip(icon: "checkmark", text: "Following")
-            }
             if !episodes.isEmpty {
                 metaChip(icon: "list.bullet", text: "\(episodes.count)\(hasMore ? "+" : "") episodes")
             }
             Spacer()
             sortButton
+        }
+    }
+
+    /// Optimistically flips the local state so the button responds instantly,
+    /// then reconciles with (or reverts to) whatever the server confirms.
+    private func toggleFollow() {
+        guard !isTogglingFollow else { return }
+        let target = !isFollowing
+        isFollowing = target
+        isTogglingFollow = true
+        Task {
+            do {
+                let confirmed = try await PodimoAPI.shared.setPodcastFollowed(podcastId: podcast.id, follow: target)
+                await MainActor.run {
+                    isFollowing = confirmed
+                    isTogglingFollow = false
+                }
+            } catch {
+                await MainActor.run {
+                    isFollowing = !target
+                    isTogglingFollow = false
+                }
+            }
+        }
+    }
+
+    private func refreshFollowState() async {
+        guard !isTogglingFollow else { return }
+        if let state = try? await PodimoAPI.shared.getPodcastFollowState(podcastId: podcast.id) {
+            isFollowing = state
         }
     }
 

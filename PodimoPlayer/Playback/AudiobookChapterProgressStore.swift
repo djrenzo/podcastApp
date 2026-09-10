@@ -28,6 +28,11 @@ final class AudiobookChapterProgressStore: @unchecked Sendable {
         setCompleted(true, episodeId: episodeId, sequence: sequence)
     }
 
+    /// Explicit "mark as not done" — the idempotent inverse of `markCompleted`.
+    func markNotCompleted(episodeId: String, sequence: Int) {
+        setCompleted(false, episodeId: episodeId, sequence: sequence)
+    }
+
     private func setCompleted(_ completed: Bool, episodeId: String, sequence: Int) {
         var sequences = completedByEpisode[episodeId] ?? []
         if completed {

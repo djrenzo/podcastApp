@@ -413,4 +413,65 @@ enum GraphQLQueries {
       __typename
     }
     """
+
+    static let podcastFollowState = """
+    query PodcastResultsQuery($id: String!) {
+      podcastById(podcastId: $id) {
+        id
+        userStats {
+          isFollowing
+          __typename
+        }
+        __typename
+      }
+    }
+    """
+
+    static let podcastFollow = """
+    mutation PodcastFollow($podcastId: String!, $follow: Boolean!) {
+      podcastFollow(podcastId: $podcastId, follow: $follow) {
+        id
+        ...PodcastUserStatsFragment
+        __typename
+      }
+    }
+
+    fragment PodcastUserStatsFragment on Podcast {
+      userStats {
+        isFollowing
+        __typename
+      }
+      __typename
+    }
+    """
+
+    static let audiobookLibraryAdd = """
+    mutation AudiobookUserLibraryAdd($audiobookId: String!, $add: Boolean!) {
+      audiobookUserLibraryAdd(audiobookId: $audiobookId, add: $add) {
+        id
+        ...AudioBookUserStateFragment
+        __typename
+      }
+    }
+
+    fragment AudioBookUserStateFragment on Audiobook {
+      userState {
+        isAddedToLibrary
+        isMarkedAsPlayed
+        ...AudiobookUserProgressFragment
+        __typename
+      }
+      __typename
+    }
+
+    fragment AudiobookUserProgressFragment on AudiobookUserState {
+      userProgress {
+        progress
+        listenTime
+        lastListenDatetime
+        __typename
+      }
+      __typename
+    }
+    """
 }

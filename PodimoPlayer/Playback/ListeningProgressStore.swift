@@ -27,6 +27,7 @@ final class ListeningProgressStore: @unchecked Sendable {
 
     private let key = "podimo_listening_progress"
     private let completedKey = "podimo_completed_episodes"
+    private let notCompletedKey = "podimo_not_completed_episodes"
     private let minProgress = 0.02
     private let maxProgress = 0.95
 
@@ -37,10 +38,18 @@ final class ListeningProgressStore: @unchecked Sendable {
     /// else the episode is listed — which the API's own `isMarkedAsPlayed`
     /// won't reflect, since this app never writes that flag back to the server.
     private(set) var completedEpisodeIds: Set<String> = []
+    /// Episodes the user has explicitly marked *not* done. Needed as its own
+    /// set (rather than just clearing local state) because the API's
+    /// `isMarkedAsPlayed` can independently say an episode is finished, and
+    /// this app never writes that flag back — so without a local override
+    /// forcing "unplayed", a "mark as not done" on such an episode would have
+    /// no visible effect.
+    private(set) var notCompletedEpisodeIds: Set<String> = []
 
     private init() {
         load()
         loadCompleted()
+        loadNotCompleted()
     }
 
     var inProgress: [ListeningProgressRecord] {
@@ -53,6 +62,10 @@ final class ListeningProgressStore: @unchecked Sendable {
         completedEpisodeIds.contains(episodeId)
     }
 
+    func isForcedNotCompleted(episodeId: String) -> Bool {
+        notCompletedEpisodeIds.contains(episodeId)
+    }
+
     /// Local data always takes precedence over the API — a locally-finished
     /// episode stays finished even if the API never got told (it's dropped
     /// from `records` once done, so that check has to come first or a stale
@@ -62,6 +75,11 @@ final class ListeningProgressStore: @unchecked Sendable {
         if isCompleted(episodeId: episode.id) {
             return EpisodeProgress(progress: 1.0, listenTime: episode.duration)
         }
+        // An explicit "mark as not done" wins over both any lingering local
+        // record and whatever the API reports, resetting the position to 0.
+        if isForcedNotCompleted(episodeId: episode.id) {
+            return EpisodeProgress(progress: 0, listenTime: 0)
+        }
         if let record = records.first(where: { $0.episodeId == episode.id }) {
             return EpisodeProgress(progress: record.progress, listenTime: record.listenTime)
         }
@@ -69,7 +87,8 @@ final class ListeningProgressStore: @unchecked Sendable {
     }
 
     func isWatched(_ episode: Episode) -> Bool {
-        episode.isMarkedAsPlayed || (effectiveProgress(for: episode)?.progress ?? 0) >= 0.95
+        if isForcedNotCompleted(episodeId: episode.id) { return false }
+        return episode.isMarkedAsPlayed || (effectiveProgress(for: episode)?.progress ?? 0) >= 0.95
     }
 
     func update(episode: Episode, currentTime: Double, duration: Double) {
@@ -82,8 +101,9 @@ final class ListeningProgressStore: @unchecked Sendable {
         }
         guard progress >= minProgress else { return }
         // Actively re-listening (e.g. restarted from the beginning) undoes a
-        // prior completion mark.
+        // prior completion mark — in either direction.
         unmarkCompleted(episodeId: episode.id)
+        unmarkNotCompleted(episodeId: episode.id)
         let record = ListeningProgressRecord(
             episodeId: episode.id,
             podcastId: episode.podcastId,
@@ -142,14 +162,24 @@ final class ListeningProgressStore: @unchecked Sendable {
         persist()
     }
 
-    /// Explicit "mark as done" (e.g. a swipe action), rather than completion
-    /// inferred from playback crossing the finish threshold.
+    /// Explicit "mark as done" (e.g. a context-menu action), rather than
+    /// completion inferred from playback crossing the finish threshold.
     func markAsDone(episodeId: String) {
         markCompleted(episodeId: episodeId)
         remove(episodeId: episodeId)
     }
 
+    /// Explicit "mark as not done": clears the completed flag, forces the
+    /// episode back to "unplayed" even against the API, and drops any saved
+    /// resume position (removing it from Keep Listening in the process).
+    func markAsNotDone(episodeId: String) {
+        unmarkCompleted(episodeId: episodeId)
+        markNotCompleted(episodeId: episodeId)
+        remove(episodeId: episodeId)
+    }
+
     private func markCompleted(episodeId: String) {
+        unmarkNotCompleted(episodeId: episodeId)
         guard !completedEpisodeIds.contains(episodeId) else { return }
         completedEpisodeIds.insert(episodeId)
         persistCompleted()
@@ -159,6 +189,18 @@ final class ListeningProgressStore: @unchecked Sendable {
         guard completedEpisodeIds.contains(episodeId) else { return }
         completedEpisodeIds.remove(episodeId)
         persistCompleted()
+    }
+
+    private func markNotCompleted(episodeId: String) {
+        guard !notCompletedEpisodeIds.contains(episodeId) else { return }
+        notCompletedEpisodeIds.insert(episodeId)
+        persistNotCompleted()
+    }
+
+    private func unmarkNotCompleted(episodeId: String) {
+        guard notCompletedEpisodeIds.contains(episodeId) else { return }
+        notCompletedEpisodeIds.remove(episodeId)
+        persistNotCompleted()
     }
 
     private func persist() {
@@ -181,6 +223,16 @@ final class ListeningProgressStore: @unchecked Sendable {
     private func loadCompleted() {
         if let ids = UserDefaults.standard.array(forKey: completedKey) as? [String] {
             completedEpisodeIds = Set(ids)
+        }
+    }
+
+    private func persistNotCompleted() {
+        UserDefaults.standard.set(Array(notCompletedEpisodeIds), forKey: notCompletedKey)
+    }
+
+    private func loadNotCompleted() {
+        if let ids = UserDefaults.standard.array(forKey: notCompletedKey) as? [String] {
+            notCompletedEpisodeIds = Set(ids)
         }
     }
 }

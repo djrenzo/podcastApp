@@ -14,7 +14,6 @@ struct SearchView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
-                    header
                     if credentials.hasCredentials {
                         searchFields
                     }
@@ -34,6 +33,22 @@ struct SearchView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 120)
+                // Search-as-you-type: .task(id:) restarts (cancelling the
+                // prior run) on every keystroke, so the sleep below debounces
+                // — only a pause in typing lets a request actually fire.
+                .task(id: [query, region]) {
+                    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else {
+                        podcasts = []
+                        audiobooks = []
+                        hasSearched = false
+                        errorMessage = nil
+                        return
+                    }
+                    try? await Task.sleep(for: .milliseconds(350))
+                    guard !Task.isCancelled else { return }
+                    await search()
+                }
             }
             .background(Color.podimoBackground)
             .navigationTitle("Search")
@@ -44,18 +59,6 @@ struct SearchView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Search")
-                .font(.largeTitle.bold())
-                .foregroundStyle(Color.podimoInk)
-            Text("Find podcasts and audiobooks on Podimo.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.top, 12)
-    }
-
     private var searchFields: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
@@ -63,7 +66,6 @@ struct SearchView: View {
                 TextField("Search podcasts and audiobooks", text: $query)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
-                    .onSubmit { Task { await search() } }
                 if !query.isEmpty {
                     Button {
                         query = ""
@@ -86,10 +88,6 @@ struct SearchView: View {
                     .padding(.vertical, 6)
                     .background(Color.podimoCard, in: RoundedRectangle(cornerRadius: 10))
                 Spacer()
-                Button("Search") { Task { await search() } }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color.podimoPurple)
-                    .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }

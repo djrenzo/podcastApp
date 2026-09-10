@@ -128,6 +128,35 @@ final class PodimoAPI: @unchecked Sendable {
         return (podcasts, audiobooks)
     }
 
+    /// Whether the user currently follows (i.e. has in their library) this
+    /// podcast — the library query carries this too, but a podcast reached
+    /// from elsewhere (e.g. an episode's "Podcast" action) won't have it.
+    func getPodcastFollowState(podcastId: String) async throws -> Bool {
+        let data = try await perform(
+            operationName: "PodcastResultsQuery",
+            query: GraphQLQueries.podcastFollowState,
+            variables: ["id": podcastId]
+        )
+        let podcast = data["podcastById"] as? [String: Any]
+        let userStats = podcast?["userStats"] as? [String: Any]
+        return userStats?["isFollowing"] as? Bool ?? false
+    }
+
+    /// Follows (`follow: true`) or unfollows (`follow: false`) a podcast —
+    /// following is what puts it in the user's library. Returns the server's
+    /// resulting `isFollowing`.
+    @discardableResult
+    func setPodcastFollowed(podcastId: String, follow: Bool) async throws -> Bool {
+        let data = try await perform(
+            operationName: "PodcastFollow",
+            query: GraphQLQueries.podcastFollow,
+            variables: ["podcastId": podcastId, "follow": follow]
+        )
+        let result = data["podcastFollow"] as? [String: Any]
+        let userStats = result?["userStats"] as? [String: Any]
+        return userStats?["isFollowing"] as? Bool ?? follow
+    }
+
     func getEpisodesFollowed(limit: Int = 20) async throws -> [Episode] {
         let data = try await perform(operationName: "EpisodesFollowedResultsQuery", query: GraphQLQueries.followed, variables: ["limit": limit])
         let list = data["podcastEpisodesFollowed"] as? [[String: Any]] ?? []
@@ -142,6 +171,21 @@ final class PodimoAPI: @unchecked Sendable {
         let relatedList = data["youMightAlsoLikeData"] as? [[String: Any]] ?? []
         let related = relatedList.compactMap { AudiobookSummary(dict: $0) }
         return (audiobook, related)
+    }
+
+    /// Adds (`add: true`) or removes (`add: false`) an audiobook from the
+    /// user's library. Returns the server's resulting `isAddedToLibrary`.
+    @discardableResult
+    func setAudiobookInLibrary(audiobookId: String, add: Bool) async throws -> Bool {
+        let data = try await perform(
+            operationName: "AudiobookUserLibraryAdd",
+            query: GraphQLQueries.audiobookLibraryAdd,
+            variables: ["audiobookId": audiobookId, "add": add],
+            extraHeaders: ["user-os": "ios", "user-version": "2.17.0"]
+        )
+        let result = data["audiobookUserLibraryAdd"] as? [String: Any]
+        let userState = result?["userState"] as? [String: Any]
+        return userState?["isAddedToLibrary"] as? Bool ?? add
     }
 
     func getAudiobookChapters(audiobookId: String) async throws -> [AudiobookChapter] {

@@ -10,6 +10,8 @@ struct AudiobookDetailView: View {
     @State private var chapters: [AudiobookChapter] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var isInLibrary = false
+    @State private var isTogglingLibrary = false
     @State private var playback = PlaybackManager.shared
     @State private var downloads = DownloadManager.shared
 
@@ -75,9 +77,49 @@ struct AudiobookDetailView: View {
 
                     downloadButton(for: detail)
                 }
+
+                libraryButton
             }
         }
         .padding(20)
+    }
+
+    private var libraryButton: some View {
+        Button {
+            toggleLibrary()
+        } label: {
+            Label(
+                isInLibrary ? "Remove from Library" : "Add to Library",
+                systemImage: isInLibrary ? "checkmark.circle.fill" : "plus.circle"
+            )
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .tint(Color.podimoPurple)
+        .disabled(isTogglingLibrary)
+    }
+
+    /// Optimistically flips the local state so the button responds instantly,
+    /// then reconciles with (or reverts to) whatever the server confirms.
+    private func toggleLibrary() {
+        guard !isTogglingLibrary else { return }
+        let target = !isInLibrary
+        isInLibrary = target
+        isTogglingLibrary = true
+        Task {
+            do {
+                let confirmed = try await PodimoAPI.shared.setAudiobookInLibrary(audiobookId: audiobookId, add: target)
+                await MainActor.run {
+                    isInLibrary = confirmed
+                    isTogglingLibrary = false
+                }
+            } catch {
+                await MainActor.run {
+                    isInLibrary = !target
+                    isTogglingLibrary = false
+                }
+            }
+        }
     }
 
     private var relatedSection: some View {
@@ -202,6 +244,9 @@ struct AudiobookDetailView: View {
             async let chaptersTask = PodimoAPI.shared.getAudiobookChapters(audiobookId: audiobookId)
             let result = try await channelTask
             detail = result.audiobook
+            if !isTogglingLibrary {
+                isInLibrary = result.audiobook.isAddedToLibrary
+            }
             relatedBooks = result.youMightAlsoLike
             chapters = (try? await chaptersTask) ?? []
         } catch {

@@ -51,7 +51,6 @@ struct LibraryView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
-                    header
                     if !credentials.hasCredentials {
                         credentialsPrompt
                     } else if let errorMessage {
@@ -75,25 +74,13 @@ struct LibraryView: View {
                 .task { await loadIfNeeded() }
             }
             .background(Color.podimoBackground)
-            .navigationTitle("Library")
+            .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: Podcast.self) { PodcastDetailView(podcast: $0) }
             .navigationDestination(for: AudiobookLink.self) { link in
                 AudiobookDetailView(audiobookId: link.id, previewTitle: link.title, previewImageUrl: link.imageUrl)
             }
             .refreshable { await load() }
         }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Good listening")
-                .font(.largeTitle.bold())
-                .foregroundStyle(Color.podimoInk)
-            Text("Your podcasts and audiobooks, in one place.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.top, 12)
     }
 
     private var credentialsPrompt: some View {

@@ -83,6 +83,9 @@ struct EpisodeRow: View {
                     if let next = queueManager.advance(past: episode.id) {
                         ListeningProgressStore.shared.startTracking(next)
                     }
+                },
+                SwipeDoneAction(title: "Mark as Not Done", icon: "arrow.uturn.backward.circle") {
+                    ListeningProgressStore.shared.markAsNotDone(episodeId: episode.id)
                 }
             ]
         }
@@ -91,9 +94,15 @@ struct EpisodeRow: View {
             actions.append(SwipeDoneAction(title: "Mark Chapter as Done", icon: "checkmark") {
                 markChapterDone(chapter)
             })
+            actions.append(SwipeDoneAction(title: "Mark Chapter as Not Done", icon: "arrow.uturn.backward") {
+                markChapterNotDone(chapter)
+            })
         }
         actions.append(SwipeDoneAction(title: "Mark Book as Done", icon: "checkmark.circle.fill") {
             ListeningProgressStore.shared.markAsDone(episodeId: episode.id)
+        })
+        actions.append(SwipeDoneAction(title: "Mark Book as Not Done", icon: "arrow.uturn.backward.circle") {
+            ListeningProgressStore.shared.markAsNotDone(episodeId: episode.id)
         })
         return actions
     }
@@ -112,6 +121,21 @@ struct EpisodeRow: View {
               let duration = episode.duration, duration > 0 else { return }
         let nextChapterStart = sorted[index + 1].startTimestampInSeconds
         ListeningProgressStore.shared.update(episode: episode, currentTime: nextChapterStart, duration: duration)
+    }
+
+    /// The inverse of `markChapterDone`: clears the chapter's completion mark
+    /// and rewinds the saved resume position back to the start of that
+    /// chapter, so it's queued up to be listened to again.
+    private func markChapterNotDone(_ chapter: AudiobookChapter) {
+        let store = ListeningProgressStore.shared
+        store.markAsNotDone(episodeId: episode.id)
+        AudiobookChapterProgressStore.shared.markNotCompleted(episodeId: episode.id, sequence: chapter.sequence)
+        // For anything past the first chapter, restore a resume position at
+        // that chapter's start; the first chapter just means "back to zero",
+        // which markAsNotDone already handled.
+        if chapter.startTimestampInSeconds >= 5, let duration = episode.duration, duration > 0 {
+            store.update(episode: episode, currentTime: chapter.startTimestampInSeconds, duration: duration)
+        }
     }
 
     var body: some View {
