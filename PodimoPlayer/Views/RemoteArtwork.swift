@@ -35,12 +35,22 @@ private final class ArtworkLoader: @unchecked Sendable {
             return cached
         }
 
-        lock.lock()
-        if let existing = inFlight[cacheKey] {
-            lock.unlock()
-            return await existing.value
-        }
+        let task = existingOrNewTask(cacheKey: cacheKey, url: url, pixelSize: pixelSize)
+        let result = await task.value
+        clearInFlight(cacheKey: cacheKey)
+        return result
+    }
 
+    /// NSLock's `lock()`/`unlock()` are unavailable directly inside an async
+    /// function body (Swift 6 flags them as a potential priority-inversion
+    /// hazard) — kept in a plain synchronous method instead, which also keeps
+    /// "check for an in-flight request, else create and register one" atomic.
+    private func existingOrNewTask(cacheKey: String, url: URL, pixelSize: CGFloat?) -> Task<UIImage?, Never> {
+        lock.lock()
+        defer { lock.unlock() }
+        if let existing = inFlight[cacheKey] {
+            return existing
+        }
         let task = Task<UIImage?, Never> {
             guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
 
@@ -62,13 +72,13 @@ private final class ArtworkLoader: @unchecked Sendable {
             return image
         }
         inFlight[cacheKey] = task
-        lock.unlock()
+        return task
+    }
 
-        let result = await task.value
+    private func clearInFlight(cacheKey: String) {
         lock.lock()
+        defer { lock.unlock() }
         inFlight[cacheKey] = nil
-        lock.unlock()
-        return result
     }
 
     /// Decodes directly at (approximately) the size it'll be displayed at,
