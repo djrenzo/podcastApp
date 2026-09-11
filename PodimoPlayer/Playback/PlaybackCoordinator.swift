@@ -20,6 +20,12 @@ final class PlaybackCoordinator: @unchecked Sendable {
             playLocal(episode: episode, url: URL(fileURLWithPath: record.localPath))
             return
         }
+        // External RSS episodes already carry a direct, playable enclosure
+        // URL — there's no Podimo episode ID to resolve one from.
+        if let externalURLString = episode.externalAudioURLString, let url = URL(string: externalURLString) {
+            playLocal(episode: episode, url: url)
+            return
+        }
 
         isResolving = true
         Task {

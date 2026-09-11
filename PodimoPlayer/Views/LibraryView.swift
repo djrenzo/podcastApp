@@ -29,6 +29,7 @@ struct LibraryView: View {
     @State private var progressStore = ListeningProgressStore.shared
     @State private var keepListeningExpanded = false
     @State private var podcastSortOrder: PodcastSortOrder = .newestEpisode
+    @State private var externalLibrary = ExternalLibraryStore.shared
     private let credentials = CredentialsStore.shared
 
     private var podcasts: [Podcast] {
@@ -37,6 +38,10 @@ struct LibraryView: View {
 
     private var audiobooks: [Audiobook] {
         entries.compactMap { if case .audiobook(let book) = $0 { return book }; return nil }
+    }
+
+    private var externalPodcasts: [Podcast] {
+        externalLibrary.entries.map { Podcast(externalLibraryEntry: $0) }
     }
 
     private var keepListeningRecords: [ListeningProgressRecord] {
@@ -166,6 +171,14 @@ struct LibraryView: View {
                     LibraryCardBody(imageUrl: book.imageUrl, title: book.title, subtitle: book.authors.joined(separator: ", "), badge: false)
                 }
                 .buttonStyle(.plain)
+            }
+            if !externalPodcasts.isEmpty {
+                CollapsibleGridSection(title: "External", items: externalPodcasts, collapsedCount: 6, isLoading: false, emptyMessage: "No external podcasts in your library yet.") { podcast in
+                    NavigationLink(value: podcast) {
+                        LibraryCardBody(imageUrl: podcast.imageUrl, title: podcast.title, subtitle: podcast.authorName ?? "", badge: false)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
     }

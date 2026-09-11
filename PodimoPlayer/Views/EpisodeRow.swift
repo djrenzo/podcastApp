@@ -50,13 +50,20 @@ struct EpisodeRow: View {
     /// denormalized podcastId/podcastName/imageUrl on hand, not the full
     /// Podcast the API would otherwise return. `Podcast.init?(dict:)` reads
     /// the image from a nested `images.coverImageUrl`, not a top-level key.
+    /// External episodes denormalize the feed URL into `podcastId` too, so
+    /// that's carried over as `externalFeedURL` to keep this navigating to
+    /// the same RSS-backed detail view rather than a broken Podimo lookup.
     private var minimalPodcast: Podcast? {
-        Podcast(dict: [
+        guard var podcast = Podcast(dict: [
             "id": episode.podcastId,
             "title": episode.podcastName,
             "hasVideo": episode.hasVideo,
             "images": ["coverImageUrl": episode.imageUrl as Any]
-        ])
+        ]) else { return nil }
+        if episode.externalAudioURLString != nil {
+            podcast.externalFeedURL = episode.podcastId
+        }
+        return podcast
     }
 
     /// For audiobooks (only ever shown here via Keep Listening), lead with

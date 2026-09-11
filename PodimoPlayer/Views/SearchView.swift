@@ -5,6 +5,7 @@ struct SearchView: View {
     @State private var region = "nl"
     @State private var podcasts: [Podcast] = []
     @State private var audiobooks: [Audiobook] = []
+    @State private var externalPodcasts: [Podcast] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var hasSearched = false
@@ -23,7 +24,7 @@ struct SearchView: View {
                         errorCard(errorMessage)
                     } else if isLoading {
                         ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
-                    } else if hasSearched && podcasts.isEmpty && audiobooks.isEmpty {
+                    } else if hasSearched && podcasts.isEmpty && audiobooks.isEmpty && externalPodcasts.isEmpty {
                         Text("No results for \u{201C}\(query)\u{201D}.")
                             .foregroundStyle(.secondary)
                     } else if hasSearched {
@@ -41,6 +42,7 @@ struct SearchView: View {
                     guard !trimmed.isEmpty else {
                         podcasts = []
                         audiobooks = []
+                        externalPodcasts = []
                         hasSearched = false
                         errorMessage = nil
                         return
@@ -143,6 +145,14 @@ struct SearchView: View {
                     .buttonStyle(.plain)
                 }
             }
+            if !externalPodcasts.isEmpty {
+                CollapsibleGridSection(title: "External", items: externalPodcasts, collapsedCount: 5, isLoading: false, emptyMessage: "No external podcasts found.") { podcast in
+                    NavigationLink(value: podcast) {
+                        LibraryCardBody(imageUrl: podcast.imageUrl, title: podcast.title, subtitle: podcast.authorName ?? "", badge: false)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
     }
 
@@ -154,9 +164,15 @@ struct SearchView: View {
         errorMessage = nil
         hasSearched = true
         do {
-            let result = try await PodimoAPI.shared.search(query: trimmedQuery, region: trimmedRegion.isEmpty ? "nl" : trimmedRegion, limit: 10)
+            // Fired concurrently: the external search hits a different,
+            // unauthenticated service, so it shouldn't wait on (or fail
+            // alongside) the Podimo one.
+            async let podimoResult = PodimoAPI.shared.search(query: trimmedQuery, region: trimmedRegion.isEmpty ? "nl" : trimmedRegion, limit: 10)
+            async let externalResult = ExternalPodcastAPI.shared.search(query: trimmedQuery)
+            let result = try await podimoResult
             podcasts = result.podcasts
             audiobooks = result.audiobooks
+            externalPodcasts = ((try? await externalResult) ?? []).map { Podcast(externalFeed: $0) }
         } catch {
             errorMessage = error.localizedDescription
         }

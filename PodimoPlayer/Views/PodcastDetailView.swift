@@ -36,6 +36,7 @@ struct PodcastDetailView: View {
     @State private var showFullDescription = false
     @State private var isFollowing = false
     @State private var isTogglingFollow = false
+    @State private var externalLibrary = ExternalLibraryStore.shared
 
     private let pageSize = 50
     private var sortOrderKey: String { "podimo_episode_sort_\(podcast.id)" }
@@ -88,9 +89,15 @@ struct PodcastDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             loadSortOrder()
-            isFollowing = podcast.isFollowing ?? false
+            if let feedURL = podcast.externalFeedURL {
+                isFollowing = externalLibrary.isInLibrary(feedURL: feedURL)
+            } else {
+                isFollowing = podcast.isFollowing ?? false
+            }
             await load()
-            await refreshFollowState()
+            if podcast.externalFeedURL == nil {
+                await refreshFollowState()
+            }
         }
         .sheet(isPresented: $showFullDescription) {
             NavigationStack {
@@ -169,9 +176,27 @@ struct PodcastDetailView: View {
 
     /// Optimistically flips the local state so the button responds instantly,
     /// then reconciles with (or reverts to) whatever the server confirms.
+    /// External podcasts have no server to reconcile with — they're just
+    /// added to or removed from the local External library directly.
     private func toggleFollow() {
         guard !isTogglingFollow else { return }
         let target = !isFollowing
+        if let feedURL = podcast.externalFeedURL {
+            isFollowing = target
+            if target {
+                externalLibrary.add(ExternalLibraryEntry(
+                    feedURL: feedURL,
+                    title: podcast.title,
+                    authorName: podcast.authorName,
+                    description: podcast.description,
+                    imageUrl: podcast.imageUrl,
+                    addedDate: Date()
+                ))
+            } else {
+                externalLibrary.remove(feedURL: feedURL)
+            }
+            return
+        }
         isFollowing = target
         isTogglingFollow = true
         Task {
@@ -248,10 +273,19 @@ struct PodcastDetailView: View {
         offset = 0
         hasMore = true
         do {
-            let page = try await PodimoAPI.shared.getEpisodes(podcastId: podcast.id, limit: pageSize, offset: 0, sorting: sortOrder.rawValue)
-            episodes = page
-            offset = page.count
-            hasMore = page.count == pageSize
+            if let feedURL = podcast.externalFeedURL {
+                // The whole feed comes back in one request — there's no
+                // server-side sort/paging to ask for, so just reverse
+                // locally for "oldest first".
+                let feed = try await ExternalPodcastAPI.shared.fetchEpisodes(feedURL: feedURL)
+                episodes = sortOrder == .ascending ? Array(feed.episodes.reversed()) : feed.episodes
+                hasMore = false
+            } else {
+                let page = try await PodimoAPI.shared.getEpisodes(podcastId: podcast.id, limit: pageSize, offset: 0, sorting: sortOrder.rawValue)
+                episodes = page
+                offset = page.count
+                hasMore = page.count == pageSize
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

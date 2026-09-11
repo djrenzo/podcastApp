@@ -42,6 +42,10 @@ struct Episode: Identifiable, Equatable {
     /// Audiobooks are represented as an Episode too (podcastName doubles as
     /// the author string); this distinguishes how playback UI should label them.
     var isAudiobook = false
+    /// Set only for episodes sourced from an external RSS feed: the direct
+    /// enclosure URL, since there's no Podimo episode ID to resolve a
+    /// playback URL from.
+    var externalAudioURLString: String? = nil
 
     init?(dict: [String: Any]) {
         guard let id = dict["id"] as? String,
@@ -55,6 +59,7 @@ struct Episode: Identifiable, Equatable {
         self.duration = dict["duration"] as? Double
         self.isMarkedAsPlayed = dict["isMarkedAsPlayed"] as? Bool ?? false
         self.hasVideo = dict["hasVideo"] as? Bool ?? false
+        self.externalAudioURLString = dict["externalAudioURL"] as? String
         if let direct = dict["imageUrl"] as? String {
             self.imageUrl = direct
         } else if let image = dict["image"] as? [String: Any] {
@@ -115,6 +120,10 @@ struct Podcast: Identifiable, Equatable, Hashable {
     let followerCount: Int?
     let isFollowing: Bool?
     let newEpisodes: Int?
+    /// Non-nil for podcasts sourced from an external RSS feed (rather than
+    /// Podimo's own catalog) — the feed URL, used both to fetch episodes and
+    /// as the identity for the local "External" library.
+    var externalFeedURL: String? = nil
 
     init?(dict: [String: Any]) {
         guard let id = dict["id"] as? String, let title = dict["title"] as? String else { return nil }
@@ -136,6 +145,32 @@ struct Podcast: Identifiable, Equatable, Hashable {
             self.isFollowing = nil
             self.newEpisodes = nil
         }
+    }
+
+    init(externalFeed feed: ExternalFeedResult) {
+        self.id = feed.url
+        self.title = feed.title
+        self.authorName = feed.author ?? feed.ownerName
+        self.description = feed.description
+        self.imageUrl = feed.image ?? feed.artwork
+        self.hasVideo = false
+        self.followerCount = nil
+        self.isFollowing = nil
+        self.newEpisodes = nil
+        self.externalFeedURL = feed.url
+    }
+
+    init(externalLibraryEntry entry: ExternalLibraryEntry) {
+        self.id = entry.feedURL
+        self.title = entry.title
+        self.authorName = entry.authorName
+        self.description = entry.description
+        self.imageUrl = entry.imageUrl
+        self.hasVideo = false
+        self.followerCount = nil
+        self.isFollowing = nil
+        self.newEpisodes = nil
+        self.externalFeedURL = entry.feedURL
     }
 }
 
