@@ -390,8 +390,12 @@ final class PlaybackManager: @unchecked Sendable {
         center.changePlaybackRateCommand.supportedPlaybackRates = Self.availableRates.map { NSNumber(value: $0) }
         center.changePlaybackRateCommand.addTarget { [weak self] event in
             guard let event = event as? MPChangePlaybackRateCommandEvent else { return .commandFailed }
+            // Pull the rate out before hopping threads: the event itself
+            // isn't Sendable, and capturing it directly in the closure below
+            // is what Swift 6 flags as a data race risk.
+            let rate = event.playbackRate
             DispatchQueue.main.async {
-                self?.setPlaybackRate(event.playbackRate)
+                self?.setPlaybackRate(rate)
             }
             return .success
         }

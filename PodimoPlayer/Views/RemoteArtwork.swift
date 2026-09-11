@@ -13,9 +13,16 @@ private nonisolated(unsafe) let artworkContentCache = NSCache<NSString, UIImage>
 /// URL that happens to point at identical bytes, which podcasts commonly do
 /// when episodes fall back to the show's own artwork) is only downloaded and
 /// decoded once.
-private actor ArtworkLoader {
+///
+/// A plain class (rather than an actor) so `load(urlString:pixelSize:)` isn't
+/// actor-isolated — an actor here would require UIImage (not Sendable) to
+/// cross an isolation boundary on every call, which Swift 6 rejects at
+/// compile time. `inFlight` is the only mutable state, guarded by a lock
+/// instead.
+private final class ArtworkLoader: @unchecked Sendable {
     static let shared = ArtworkLoader()
 
+    private let lock = NSLock()
     /// De-dupes concurrent requests for the same cache key (e.g. many rows
     /// scrolling into view at once, all wanting the same not-yet-cached URL).
     private var inFlight: [String: Task<UIImage?, Never>] = [:]
@@ -27,7 +34,10 @@ private actor ArtworkLoader {
         if let cached = artworkResultCache.object(forKey: cacheKey as NSString) {
             return cached
         }
+
+        lock.lock()
         if let existing = inFlight[cacheKey] {
+            lock.unlock()
             return await existing.value
         }
 
@@ -52,8 +62,12 @@ private actor ArtworkLoader {
             return image
         }
         inFlight[cacheKey] = task
+        lock.unlock()
+
         let result = await task.value
+        lock.lock()
         inFlight[cacheKey] = nil
+        lock.unlock()
         return result
     }
 
