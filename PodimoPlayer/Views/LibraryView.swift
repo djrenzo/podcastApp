@@ -27,6 +27,8 @@ struct LibraryView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var progressStore = ListeningProgressStore.shared
+    @State private var downloads = DownloadManager.shared
+    @State private var network = NetworkMonitor.shared
     @State private var keepListeningExpanded = false
     @State private var podcastSortOrder: PodcastSortOrder = .newestEpisode
     @State private var externalLibrary = ExternalLibraryStore.shared
@@ -44,8 +46,14 @@ struct LibraryView: View {
         externalLibrary.entries.map { Podcast(externalLibraryEntry: $0) }
     }
 
+    /// Offline, an episode/audiobook's stream URL can't be resolved at all —
+    /// only what's actually been downloaded is playable — so Keep Listening
+    /// narrows down to just those instead of listing things that would fail
+    /// the moment they're tapped.
     private var keepListeningRecords: [ListeningProgressRecord] {
-        Array(progressStore.inProgress.prefix(10))
+        let inProgress = progressStore.inProgress
+        let available = network.isConnected ? inProgress : inProgress.filter { downloads.record(for: $0.episodeId) != nil }
+        return Array(available.prefix(10))
     }
 
     private var visibleKeepListeningRecords: [ListeningProgressRecord] {
@@ -58,13 +66,20 @@ struct LibraryView: View {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     if !credentials.hasCredentials {
                         credentialsPrompt
-                    } else if let errorMessage {
-                        errorCard(errorMessage)
                     } else {
+                        // Keep Listening (already-local data, and — offline —
+                        // filtered to only what's downloaded) shouldn't
+                        // disappear just because the library fetch itself
+                        // failed; only the section that actually needs that
+                        // network response falls back to the error card.
                         if !keepListeningRecords.isEmpty {
                             keepListeningSection
                         }
-                        librarySection
+                        if let errorMessage {
+                            errorCard(errorMessage)
+                        } else {
+                            librarySection
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -123,7 +138,10 @@ struct LibraryView: View {
 
     private var keepListeningSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Keep Listening", subtitle: "\(keepListeningRecords.count) in progress")
+            SectionHeader(
+                title: "Keep Listening",
+                subtitle: network.isConnected ? "\(keepListeningRecords.count) in progress" : "\(keepListeningRecords.count) downloaded \u{2022} offline"
+            )
             ForEach(visibleKeepListeningRecords) { record in
                 if let episode = episode(from: record) {
                     EpisodeRow(episode: episode)

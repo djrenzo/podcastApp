@@ -189,9 +189,7 @@ struct EpisodeRow: View {
                 }
 
                 Spacer(minLength: 4)
-                if !episode.isAudiobook {
-                    downloadButton
-                }
+                downloadButton
             }
             .padding(12)
             .background(Color.podimoCard, in: RoundedRectangle(cornerRadius: 18))
@@ -309,6 +307,29 @@ struct EpisodeRow: View {
     }
 
     private func startDownload() {
+        // Audiobooks (only ever shown here via Keep Listening) have no
+        // podcast-episode media URL to resolve — they need their own channel
+        // lookup for a playable URL, same as AudiobookDetailView's own
+        // download button.
+        if episode.isAudiobook {
+            isResolvingDownloadURL = true
+            Task {
+                do {
+                    let result = try await PodimoAPI.shared.getAudiobookChannel(audiobookId: episode.id)
+                    guard let urlString = result.audiobook.playableURLString else {
+                        await MainActor.run { isResolvingDownloadURL = false }
+                        return
+                    }
+                    await MainActor.run {
+                        downloads.startDownload(episode: episode, mediaURLString: urlString)
+                        isResolvingDownloadURL = false
+                    }
+                } catch {
+                    await MainActor.run { isResolvingDownloadURL = false }
+                }
+            }
+            return
+        }
         // External episodes already carry a direct enclosure URL — there's
         // no Podimo episode ID to resolve one from.
         if let externalURLString = episode.externalAudioURLString {
