@@ -7,6 +7,14 @@ import UIKit
 final class AppDelegate: NSObject, UIApplicationDelegate {
     var backgroundSessionCompletionHandlers: [String: () -> Void] = [:]
 
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        // Without this, MPRemoteCommandCenter's handlers can be registered
+        // but the system never actually routes lock screen / Control Center
+        // commands (or shows the Now Playing banner) to this process.
+        application.beginReceivingRemoteControlEvents()
+        return true
+    }
+
     func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
         backgroundSessionCompletionHandlers[identifier] = completionHandler
     }

@@ -142,6 +142,19 @@ final class PodimoAPI: @unchecked Sendable {
         return userStats?["isFollowing"] as? Bool ?? false
     }
 
+    /// Full podcast details by ID — used to backfill author/description on a
+    /// `Podcast` reconstructed from just an episode's denormalized fields
+    /// (neither of which carries the podcast's own description).
+    func getPodcast(podcastId: String) async throws -> Podcast? {
+        let data = try await perform(
+            operationName: "PodcastDetailsQuery",
+            query: GraphQLQueries.podcastDetails,
+            variables: ["id": podcastId]
+        )
+        guard let dict = data["podcastById"] as? [String: Any] else { return nil }
+        return Podcast(dict: dict)
+    }
+
     /// Follows (`follow: true`) or unfollows (`follow: false`) a podcast —
     /// following is what puts it in the user's library. Returns the server's
     /// resulting `isFollowing`.

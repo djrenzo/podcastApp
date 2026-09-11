@@ -21,7 +21,7 @@ struct RootTabView: View {
 
             if playback.currentEpisode != nil {
                 MiniPlayerBar(onTap: { showNowPlaying = true })
-                    .padding(.bottom, 49)
+                    .padding(.bottom, 49 + 8)
             }
         }
         // A regular sheet (unlike fullScreenCover) supports swipe-to-dismiss,

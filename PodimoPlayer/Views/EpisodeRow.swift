@@ -309,6 +309,12 @@ struct EpisodeRow: View {
     }
 
     private func startDownload() {
+        // External episodes already carry a direct enclosure URL — there's
+        // no Podimo episode ID to resolve one from.
+        if let externalURLString = episode.externalAudioURLString {
+            downloads.startDownload(episode: episode, mediaURLString: externalURLString)
+            return
+        }
         isResolvingDownloadURL = true
         Task {
             do {

@@ -111,7 +111,7 @@ struct SearchView: View {
     private var resultsSection: some View {
         VStack(alignment: .leading, spacing: 28) {
             if !podcasts.isEmpty {
-                CollapsibleGridSection(title: "Podcasts", items: podcasts, collapsedCount: 5, isLoading: false, emptyMessage: "No podcasts found.") { podcast in
+                CollapsibleGridSection(title: "Podcasts", items: podcasts, collapsedCount: 4, isLoading: false, emptyMessage: "No podcasts found.") { podcast in
                     NavigationLink(value: podcast) {
                         LibraryCardBody(imageUrl: podcast.imageUrl, title: podcast.title, subtitle: podcast.authorName ?? "", badge: podcast.hasVideo)
                     }
@@ -119,7 +119,7 @@ struct SearchView: View {
                 }
             }
             if !audiobooks.isEmpty {
-                CollapsibleGridSection(title: "Audiobooks", items: audiobooks, collapsedCount: 5, isLoading: false, emptyMessage: "No audiobooks found.") { book in
+                CollapsibleGridSection(title: "Audiobooks", items: audiobooks, collapsedCount: 4, isLoading: false, emptyMessage: "No audiobooks found.") { book in
                     NavigationLink(value: AudiobookLink(id: book.id, title: book.title, imageUrl: book.imageUrl)) {
                         LibraryCardBody(imageUrl: book.imageUrl, title: book.title, subtitle: book.authors.joined(separator: ", "), badge: false)
                     }
@@ -127,7 +127,7 @@ struct SearchView: View {
                 }
             }
             if !externalPodcasts.isEmpty {
-                CollapsibleGridSection(title: "External", items: externalPodcasts, collapsedCount: 5, isLoading: false, emptyMessage: "No external podcasts found.") { podcast in
+                CollapsibleGridSection(title: "External", items: externalPodcasts, collapsedCount: 4, isLoading: false, emptyMessage: "No external podcasts found.") { podcast in
                     NavigationLink(value: podcast) {
                         LibraryCardBody(imageUrl: podcast.imageUrl, title: podcast.title, subtitle: podcast.authorName ?? "", badge: false)
                     }

@@ -194,6 +194,13 @@ final class PlaybackManager: @unchecked Sendable {
     }
 
     func seek(to seconds: Double) {
+        // Reflected immediately rather than waiting on the periodic time
+        // observer: AVPlayer's default (frame-accurate) seek can take a
+        // moment to actually land, during which the observer's next tick
+        // would otherwise overwrite this with the pre-seek time — reading as
+        // the scrubbed-to position getting "stuck" until something else
+        // (e.g. reopening Now Playing) forces a fresh read.
+        currentTime = seconds
         player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
         updateNowPlayingInfo()
     }

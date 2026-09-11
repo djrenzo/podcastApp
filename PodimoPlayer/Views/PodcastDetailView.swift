@@ -37,9 +37,16 @@ struct PodcastDetailView: View {
     @State private var isFollowing = false
     @State private var isTogglingFollow = false
     @State private var externalLibrary = ExternalLibraryStore.shared
+    /// Backfilled when `podcast` was reconstructed from just an episode's
+    /// denormalized fields (Now Playing's info button, Keep Listening's
+    /// "Podcast" action) and so is missing its author/description.
+    @State private var resolvedPodcast: Podcast?
 
     private let pageSize = 50
     private var sortOrderKey: String { "podimo_episode_sort_\(podcast.id)" }
+
+    private var displayAuthor: String? { resolvedPodcast?.authorName ?? podcast.authorName }
+    private var displayDescription: String? { resolvedPodcast?.description ?? podcast.description }
 
     /// Filtered client-side — the episode list API has no "unwatched" filter
     /// of its own, and "watched" already depends on merging local progress
@@ -97,12 +104,15 @@ struct PodcastDetailView: View {
             await load()
             if podcast.externalFeedURL == nil {
                 await refreshFollowState()
+                if podcast.authorName == nil || podcast.description == nil {
+                    resolvedPodcast = try? await PodimoAPI.shared.getPodcast(podcastId: podcast.id)
+                }
             }
         }
         .sheet(isPresented: $showFullDescription) {
             NavigationStack {
                 ScrollView {
-                    Text(podcast.description ?? "")
+                    Text(displayDescription ?? "")
                         .font(.body)
                         .foregroundStyle(Color.podimoInk)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -127,7 +137,7 @@ struct PodcastDetailView: View {
                     .frame(width: 96, height: 96)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(podcast.title).font(.title3.bold()).foregroundStyle(Color.podimoInk)
-                    if let author = podcast.authorName {
+                    if let author = displayAuthor {
                         Text(author).font(.subheadline).foregroundStyle(.secondary)
                     }
                     if let followers = podcast.followerCount {
@@ -137,7 +147,7 @@ struct PodcastDetailView: View {
             }
             followButton
             metaChips
-            if let description = podcast.description, !description.isEmpty {
+            if let description = displayDescription, !description.isEmpty {
                 Text(description)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -280,6 +290,12 @@ struct PodcastDetailView: View {
                 let feed = try await ExternalPodcastAPI.shared.fetchEpisodes(feedURL: feedURL)
                 episodes = sortOrder == .ascending ? Array(feed.episodes.reversed()) : feed.episodes
                 hasMore = false
+                if podcast.authorName == nil || podcast.description == nil {
+                    var backfilled = podcast
+                    backfilled.authorName = feed.author
+                    backfilled.description = feed.description
+                    resolvedPodcast = backfilled
+                }
             } else {
                 let page = try await PodimoAPI.shared.getEpisodes(podcastId: podcast.id, limit: pageSize, offset: 0, sorting: sortOrder.rawValue)
                 episodes = page

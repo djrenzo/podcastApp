@@ -38,6 +38,7 @@ struct ParsedRSSFeed {
     var title: String?
     var description: String?
     var imageUrl: String?
+    var author: String?
     var episodes: [Episode]
 }
 
@@ -88,6 +89,7 @@ private final class RSSFeedParser: NSObject, XMLParserDelegate {
     private var feedTitle: String?
     private var feedDescription: String?
     private var feedImageUrl: String?
+    private var feedAuthor: String?
     private var items: [[String: String]] = []
 
     private var currentText = ""
@@ -108,7 +110,7 @@ private final class RSSFeedParser: NSObject, XMLParserDelegate {
         let episodes = items.enumerated().map { index, dict in
             makeEpisode(from: dict, index: index, feedURL: feedURL, podcastTitle: feedTitle ?? "")
         }
-        return ParsedRSSFeed(title: feedTitle, description: feedDescription, imageUrl: feedImageUrl, episodes: episodes)
+        return ParsedRSSFeed(title: feedTitle, description: feedDescription, imageUrl: feedImageUrl, author: feedAuthor, episodes: episodes)
     }
 
     func parser(_ parser: XMLParser, didStartElement elementName: String, namespaceURI: String?, qualifiedName qName: String?, attributes attributeDict: [String: String] = [:]) {
@@ -154,6 +156,7 @@ private final class RSSFeedParser: NSObject, XMLParserDelegate {
             switch elementName {
             case "title": feedTitle = feedTitle ?? (text.isEmpty ? nil : text)
             case "description": feedDescription = feedDescription ?? (text.isEmpty ? nil : text.strippingHTML)
+            case "itunes:author", "author", "managingEditor": feedAuthor = feedAuthor ?? (text.isEmpty ? nil : text)
             default: break
             }
         }

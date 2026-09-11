@@ -117,7 +117,7 @@ struct NowPlayingView: View {
                 .foregroundStyle(Color.podimoInk)
 
                 HStack(spacing: 24) {
-                    sleepTimerButton
+                    SleepTimerButton()
                     queueButton
                     markDoneButton
                     infoButton
@@ -192,44 +192,6 @@ struct NowPlayingView: View {
     }
 
     private static let sleepTimerOptions = [5, 10, 15, 30, 45, 60]
-
-    private var sleepTimerButton: some View {
-        Menu {
-            ForEach(Self.sleepTimerOptions, id: \.self) { minutes in
-                Button {
-                    playback.setSleepTimer(minutes: minutes)
-                } label: {
-                    Label("\(minutes) min", systemImage: "moon.zzz")
-                }
-            }
-            if playback.sleepTimerRemaining != nil {
-                Button(role: .destructive) {
-                    playback.cancelSleepTimer()
-                } label: {
-                    Label("Cancel Timer", systemImage: "xmark.circle")
-                }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "moon.zzz")
-                if let remaining = playback.sleepTimerRemaining {
-                    Text(sleepTimerLabel(remaining))
-                        .font(.caption.monospacedDigit())
-                }
-            }
-            .font(.subheadline)
-            .foregroundStyle(playback.sleepTimerRemaining != nil ? Color.podimoPurple : Color.secondary)
-            .padding(10)
-            .background(Color.podimoCard, in: Capsule())
-        }
-    }
-
-    private func sleepTimerLabel(_ seconds: TimeInterval) -> String {
-        let total = max(0, Int(seconds.rounded()))
-        let m = total / 60
-        let s = total % 60
-        return String(format: "%d:%02d", m, s)
-    }
 
     /// Shows the video inline, in the same slot the artwork occupies for
     /// audio episodes, rather than a separate full-screen cover. Video
@@ -383,6 +345,55 @@ struct NowPlayingView: View {
     private func format(_ seconds: Double) -> String {
         guard seconds.isFinite, seconds >= 0 else { return "0:00" }
         let total = Int(seconds)
+        let m = total / 60
+        let s = total % 60
+        return String(format: "%d:%02d", m, s)
+    }
+}
+
+/// Its own view (rather than a computed property on NowPlayingView) so its
+/// Menu only re-renders when `sleepTimerRemaining` itself changes — inlined,
+/// it re-rendered every ~0.5s alongside `currentTime` ticking during
+/// playback, which made the Menu control visibly flicker and briefly
+/// mis-layout when its label switched between the icon-only and icon+countdown
+/// states.
+private struct SleepTimerButton: View {
+    @State private var playback = PlaybackManager.shared
+    private static let options = [5, 10, 15, 30, 45, 60]
+
+    var body: some View {
+        Menu {
+            ForEach(Self.options, id: \.self) { minutes in
+                Button {
+                    playback.setSleepTimer(minutes: minutes)
+                } label: {
+                    Label("\(minutes) min", systemImage: "moon.zzz")
+                }
+            }
+            if playback.sleepTimerRemaining != nil {
+                Button(role: .destructive) {
+                    playback.cancelSleepTimer()
+                } label: {
+                    Label("Cancel Timer", systemImage: "xmark.circle")
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "moon.zzz")
+                if let remaining = playback.sleepTimerRemaining {
+                    Text(label(remaining))
+                        .font(.caption.monospacedDigit())
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(playback.sleepTimerRemaining != nil ? Color.podimoPurple : Color.secondary)
+            .padding(10)
+            .background(Color.podimoCard, in: Capsule())
+        }
+    }
+
+    private func label(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds.rounded()))
         let m = total / 60
         let s = total % 60
         return String(format: "%d:%02d", m, s)

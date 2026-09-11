@@ -113,8 +113,8 @@ struct Episode: Identifiable, Equatable {
 struct Podcast: Identifiable, Equatable, Hashable {
     let id: String
     let title: String
-    let authorName: String?
-    let description: String?
+    var authorName: String?
+    var description: String?
     let imageUrl: String?
     let hasVideo: Bool
     let followerCount: Int?
