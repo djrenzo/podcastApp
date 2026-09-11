@@ -155,7 +155,7 @@ struct EpisodeRow: View {
             }
         } label: {
             HStack(alignment: .top, spacing: 12) {
-                RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 12)
+                RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 12, targetSize: 64)
                     .frame(width: 64, height: 64)
 
                 VStack(alignment: .leading, spacing: 4) {

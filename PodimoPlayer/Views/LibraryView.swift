@@ -149,7 +149,8 @@ struct LibraryView: View {
             "hasVideo": record.hasVideo,
             "duration": record.duration,
             "isMarkedAsPlayed": record.isMarkedAsPlayed,
-            "userProgress": ["progress": record.progress, "listenTime": record.listenTime]
+            "userProgress": ["progress": record.progress, "listenTime": record.listenTime],
+            "externalAudioURL": record.externalAudioURLString as Any
         ]) else { return nil }
         episode.chapters = record.chapters
         episode.isAudiobook = record.isAudiobook
@@ -338,7 +339,7 @@ struct LibraryCardBody: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .topTrailing) {
-                RemoteArtwork(urlString: imageUrl, cornerRadius: 16)
+                RemoteArtwork(urlString: imageUrl, cornerRadius: 16, targetSize: 200)
                     .aspectRatio(1, contentMode: .fit)
                 if badge {
                     Image(systemName: "play.rectangle.fill")

@@ -18,6 +18,7 @@ private struct QueuedEpisodeRecord: Codable {
     var isMarkedAsPlayed: Bool
     var hasVideo: Bool
     var chapters: [AudiobookChapter]
+    var externalAudioURLString: String?
 
     init(episode: Episode) {
         id = episode.id
@@ -31,6 +32,7 @@ private struct QueuedEpisodeRecord: Codable {
         isMarkedAsPlayed = episode.isMarkedAsPlayed
         hasVideo = episode.hasVideo
         chapters = episode.chapters
+        externalAudioURLString = episode.externalAudioURLString
     }
 
     var asEpisode: Episode? {
@@ -44,7 +46,8 @@ private struct QueuedEpisodeRecord: Codable {
             "imageUrl": imageUrl as Any,
             "duration": duration as Any,
             "isMarkedAsPlayed": isMarkedAsPlayed,
-            "hasVideo": hasVideo
+            "hasVideo": hasVideo,
+            "externalAudioURL": externalAudioURLString as Any
         ]) else { return nil }
         episode.chapters = chapters
         return episode
@@ -109,6 +112,14 @@ final class EpisodeQueueManager: @unchecked Sendable {
         manualQueue.remove(atOffsets: offsets)
     }
 
+    /// Drops everything up to and including `episodeId` from the manual
+    /// queue — used when tapping an episode further down the queue list to
+    /// jump straight to it, skipping whatever came before it.
+    func removeManualQueuePrefix(through episodeId: String) {
+        guard let index = manualQueue.firstIndex(where: { $0.id == episodeId }) else { return }
+        manualQueue.removeFirst(index + 1)
+    }
+
     func clearManualQueue() {
         manualQueue.removeAll()
     }
@@ -130,6 +141,14 @@ final class EpisodeQueueManager: @unchecked Sendable {
     func restoreQueue(for episodeId: String) {
         autoplayQueue = queuesByOwner[episodeId]?.compactMap(\.asEpisode) ?? []
         currentOwnerId = episodeId
+    }
+
+    /// Jumps ahead to `episodeId` within the autoplay queue — used when
+    /// tapping an episode further down the queue list — dropping everything
+    /// that came before it and re-saving the remaining tail under it.
+    func skipAutoplay(to episodeId: String) {
+        guard let index = autoplayQueue.firstIndex(where: { $0.id == episodeId }) else { return }
+        setAutoplayQueue(Array(autoplayQueue[(index + 1)...]), owner: episodeId)
     }
 
     /// Manual queue takes priority. Removes whatever it returns, since

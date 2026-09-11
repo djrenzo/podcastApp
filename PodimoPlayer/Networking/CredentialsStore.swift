@@ -7,6 +7,7 @@ final class CredentialsStore: @unchecked Sendable {
 
     private let cookieKey = "podimo_cookie"
     private let authKey = "podimo_auth"
+    private let regionKey = "podimo_search_region"
 
     var cookie: String {
         didSet { UserDefaults.standard.set(cookie, forKey: cookieKey) }
@@ -14,6 +15,11 @@ final class CredentialsStore: @unchecked Sendable {
 
     var authToken: String {
         didSet { UserDefaults.standard.set(authToken, forKey: authKey) }
+    }
+
+    /// Region code used for Podimo search (e.g. "nl", "es", "en"). Set in Settings.
+    var searchRegion: String {
+        didSet { UserDefaults.standard.set(searchRegion, forKey: regionKey) }
     }
 
     var hasCredentials: Bool {
@@ -29,6 +35,7 @@ final class CredentialsStore: @unchecked Sendable {
     private init() {
         cookie = UserDefaults.standard.string(forKey: cookieKey) ?? Self.defaultCookie
         authToken = UserDefaults.standard.string(forKey: authKey) ?? Self.defaultAuth
+        searchRegion = UserDefaults.standard.string(forKey: regionKey) ?? "nl"
     }
 
     func clear() {

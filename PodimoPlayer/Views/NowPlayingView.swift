@@ -67,13 +67,20 @@ struct NowPlayingView: View {
     /// The Now Playing episode only carries its podcast's denormalized
     /// id/name/image, not a full Podcast — reconstruct a minimal one.
     /// `Podcast.init?(dict:)` reads the image from a nested `images.coverImageUrl`.
+    /// External episodes denormalize the feed URL into `podcastId`, so that's
+    /// carried over as `externalFeedURL` to route to the RSS-backed detail
+    /// view instead of a broken Podimo lookup.
     private func minimalPodcast(for episode: Episode) -> Podcast? {
-        Podcast(dict: [
+        guard var podcast = Podcast(dict: [
             "id": episode.podcastId,
             "title": episode.podcastName,
             "hasVideo": episode.hasVideo,
             "images": ["coverImageUrl": episode.imageUrl as Any]
-        ])
+        ]) else { return nil }
+        if episode.externalAudioURLString != nil {
+            podcast.externalFeedURL = episode.podcastId
+        }
+        return podcast
     }
 
     private var portraitContent: some View {

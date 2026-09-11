@@ -22,6 +22,14 @@ struct SettingsView: View {
                         .autocorrectionDisabled()
                 }
 
+                Section("Search") {
+                    Picker("Region", selection: $credentials.searchRegion) {
+                        Text("Netherlands (nl)").tag("nl")
+                        Text("Spain (es)").tag("es")
+                        Text("English (en)").tag("en")
+                    }
+                }
+
                 Section {
                     Button {
                         Task { await testConnection() }

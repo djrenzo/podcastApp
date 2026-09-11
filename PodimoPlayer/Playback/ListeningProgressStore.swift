@@ -17,6 +17,10 @@ struct ListeningProgressRecord: Codable, Identifiable, Equatable {
     var description: String?
     var publishDatetime: String?
     var isMarkedAsPlayed = false
+    /// Set only for episodes sourced from an external RSS feed; carried
+    /// through so playback from Keep Listening doesn't try to resolve a
+    /// Podimo episode URL for a podcastId that's actually a feed URL.
+    var externalAudioURLString: String? = nil
 
     var id: String { episodeId }
 }
@@ -119,7 +123,8 @@ final class ListeningProgressStore: @unchecked Sendable {
             isAudiobook: episode.isAudiobook,
             description: episode.description,
             publishDatetime: episode.publishDatetime,
-            isMarkedAsPlayed: episode.isMarkedAsPlayed
+            isMarkedAsPlayed: episode.isMarkedAsPlayed,
+            externalAudioURLString: episode.externalAudioURLString
         )
         records.removeAll { $0.episodeId == episode.id }
         records.append(record)
@@ -149,7 +154,8 @@ final class ListeningProgressStore: @unchecked Sendable {
             isAudiobook: episode.isAudiobook,
             description: episode.description,
             publishDatetime: episode.publishDatetime,
-            isMarkedAsPlayed: episode.isMarkedAsPlayed
+            isMarkedAsPlayed: episode.isMarkedAsPlayed,
+            externalAudioURLString: episode.externalAudioURLString
         )
         records.removeAll { $0.episodeId == episode.id }
         records.append(record)

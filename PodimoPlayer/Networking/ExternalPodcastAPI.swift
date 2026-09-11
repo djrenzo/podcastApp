@@ -141,7 +141,7 @@ private final class RSSFeedParser: NSObject, XMLParserDelegate {
         if inItem {
             switch elementName {
             case "title": currentItem["title"] = text
-            case "description", "itunes:summary": currentItem["description"] = currentItem["description"] ?? text
+            case "description", "itunes:summary": currentItem["description"] = currentItem["description"] ?? text.strippingHTML
             case "pubDate": currentItem["pubDate"] = text
             case "guid": currentItem["guid"] = text
             case "itunes:duration": currentItem["duration"] = text
@@ -153,7 +153,7 @@ private final class RSSFeedParser: NSObject, XMLParserDelegate {
         } else {
             switch elementName {
             case "title": feedTitle = feedTitle ?? (text.isEmpty ? nil : text)
-            case "description": feedDescription = feedDescription ?? (text.isEmpty ? nil : text)
+            case "description": feedDescription = feedDescription ?? (text.isEmpty ? nil : text.strippingHTML)
             default: break
             }
         }

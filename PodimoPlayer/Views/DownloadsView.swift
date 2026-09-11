@@ -77,7 +77,7 @@ struct DownloadsView: View {
 
     private func row(for record: DownloadRecord) -> some View {
         HStack(spacing: 12) {
-            RemoteArtwork(urlString: record.imageUrl, cornerRadius: 10)
+            RemoteArtwork(urlString: record.imageUrl, cornerRadius: 10, targetSize: 52)
                 .frame(width: 52, height: 52)
             VStack(alignment: .leading, spacing: 4) {
                 Text(record.title).font(.subheadline.weight(.semibold)).lineLimit(2)
@@ -91,7 +91,7 @@ struct DownloadsView: View {
 
     private func downloadingRow(_ episode: Episode, state: DownloadState) -> some View {
         HStack(spacing: 12) {
-            RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 10)
+            RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 10, targetSize: 52)
                 .frame(width: 52, height: 52)
             VStack(alignment: .leading, spacing: 4) {
                 Text(episode.title).font(.subheadline.weight(.semibold)).lineLimit(2)

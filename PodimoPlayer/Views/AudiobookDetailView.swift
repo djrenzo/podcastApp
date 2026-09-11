@@ -132,7 +132,7 @@ struct AudiobookDetailView: View {
                 ForEach(relatedBooks) { book in
                     NavigationLink(value: AudiobookLink(id: book.id, title: book.title, imageUrl: book.imageUrl)) {
                         VStack(alignment: .leading, spacing: 8) {
-                            RemoteArtwork(urlString: book.imageUrl, cornerRadius: 16)
+                            RemoteArtwork(urlString: book.imageUrl, cornerRadius: 16, targetSize: 200)
                                 .aspectRatio(1, contentMode: .fit)
                             Text(book.title).font(.subheadline.weight(.semibold)).lineLimit(1).foregroundStyle(Color.podimoInk)
                             if !book.authorNames.isEmpty {

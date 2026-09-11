@@ -151,7 +151,7 @@ struct Podcast: Identifiable, Equatable, Hashable {
         self.id = feed.url
         self.title = feed.title
         self.authorName = feed.author ?? feed.ownerName
-        self.description = feed.description
+        self.description = feed.description?.strippingHTML
         self.imageUrl = feed.image ?? feed.artwork
         self.hasVideo = false
         self.followerCount = nil

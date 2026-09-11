@@ -2,13 +2,13 @@ import SwiftUI
 
 struct SearchView: View {
     @State private var query = ""
-    @State private var region = "nl"
     @State private var podcasts: [Podcast] = []
     @State private var audiobooks: [Audiobook] = []
     @State private var externalPodcasts: [Podcast] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var hasSearched = false
+    @State private var searchTask: Task<Void, Never>?
     private let credentials = CredentialsStore.shared
 
     var body: some View {
@@ -34,22 +34,17 @@ struct SearchView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 120)
-                // Search-as-you-type: .task(id:) restarts (cancelling the
-                // prior run) on every keystroke, so the sleep below debounces
-                // — only a pause in typing lets a request actually fire.
-                .task(id: [query, region]) {
-                    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty else {
-                        podcasts = []
-                        audiobooks = []
-                        externalPodcasts = []
-                        hasSearched = false
-                        errorMessage = nil
-                        return
-                    }
-                    try? await Task.sleep(for: .milliseconds(350))
-                    guard !Task.isCancelled else { return }
-                    await search()
+                // A plain Task kicked off from onChange, rather than
+                // .task(id:) — .task is cancelled and *restarted* every time
+                // this view disappears/reappears (e.g. pushing a
+                // PodcastDetailView and coming back), which would otherwise
+                // re-run the search — and its debounce sleep — on every trip
+                // back from a result, flashing the loading state and
+                // discarding what's already on screen.
+                .onChange(of: query) { scheduleSearch() }
+                .onAppear {
+                    guard !hasSearched, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                    scheduleSearch()
                 }
             }
             .background(Color.podimoBackground)
@@ -62,36 +57,22 @@ struct SearchView: View {
     }
 
     private var searchFields: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search podcasts and audiobooks", text: $query)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                if !query.isEmpty {
-                    Button {
-                        query = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("Search podcasts and audiobooks", text: $query)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
                 }
-            }
-            .padding(12)
-            .background(Color.podimoCard, in: RoundedRectangle(cornerRadius: 14))
-
-            HStack(spacing: 10) {
-                Text("Region").font(.subheadline).foregroundStyle(.secondary)
-                TextField("nl", text: $region)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .frame(width: 60)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.podimoCard, in: RoundedRectangle(cornerRadius: 10))
-                Spacer()
+                .buttonStyle(.plain)
             }
         }
+        .padding(12)
+        .background(Color.podimoCard, in: RoundedRectangle(cornerRadius: 14))
     }
 
     private var credentialsPrompt: some View {
@@ -156,10 +137,31 @@ struct SearchView: View {
         }
     }
 
+    /// Debounces search-as-you-type: cancels whatever's still pending from
+    /// the last keystroke and starts a fresh 350ms-delayed one. Stored in
+    /// @State (rather than a `.task`) so it isn't tied to this view's
+    /// appear/disappear lifecycle.
+    private func scheduleSearch() {
+        searchTask?.cancel()
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            podcasts = []
+            audiobooks = []
+            externalPodcasts = []
+            hasSearched = false
+            errorMessage = nil
+            return
+        }
+        searchTask = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            await search()
+        }
+    }
+
     private func search() async {
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuery.isEmpty, credentials.hasCredentials else { return }
-        let trimmedRegion = region.trimmingCharacters(in: .whitespacesAndNewlines)
         isLoading = true
         errorMessage = nil
         hasSearched = true
@@ -167,7 +169,7 @@ struct SearchView: View {
             // Fired concurrently: the external search hits a different,
             // unauthenticated service, so it shouldn't wait on (or fail
             // alongside) the Podimo one.
-            async let podimoResult = PodimoAPI.shared.search(query: trimmedQuery, region: trimmedRegion.isEmpty ? "nl" : trimmedRegion, limit: 10)
+            async let podimoResult = PodimoAPI.shared.search(query: trimmedQuery, region: credentials.searchRegion, limit: 10)
             async let externalResult = ExternalPodcastAPI.shared.search(query: trimmedQuery)
             let result = try await podimoResult
             podcasts = result.podcasts

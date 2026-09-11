@@ -52,7 +52,7 @@ struct EpisodeInfoSheet: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 12) {
-            RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 12)
+            RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 12, targetSize: 96)
                 .frame(width: 64, height: 64)
             Text(episode.title)
                 .font(.headline)

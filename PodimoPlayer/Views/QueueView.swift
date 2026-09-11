@@ -2,6 +2,7 @@ import SwiftUI
 
 struct QueueView: View {
     @State private var queueManager = EpisodeQueueManager.shared
+    @State private var coordinator = PlaybackCoordinator.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -18,7 +19,10 @@ struct QueueView: View {
                         if !queueManager.manualQueue.isEmpty {
                             Section("Up Next") {
                                 ForEach(queueManager.manualQueue) { episode in
-                                    row(for: episode)
+                                    row(for: episode) {
+                                        queueManager.removeManualQueuePrefix(through: episode.id)
+                                        play(episode)
+                                    }
                                 }
                                 .onDelete { offsets in
                                     queueManager.removeFromManualQueue(at: offsets)
@@ -28,7 +32,10 @@ struct QueueView: View {
                         if !queueManager.autoplayQueue.isEmpty {
                             Section("Autoplay") {
                                 ForEach(queueManager.autoplayQueue) { episode in
-                                    row(for: episode)
+                                    row(for: episode) {
+                                        queueManager.skipAutoplay(to: episode.id)
+                                        play(episode)
+                                    }
                                 }
                             }
                         }
@@ -53,16 +60,28 @@ struct QueueView: View {
         }
     }
 
-    private func row(for episode: Episode) -> some View {
-        HStack(spacing: 12) {
-            RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 8)
-                .frame(width: 44, height: 44)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(episode.title).font(.subheadline.weight(.semibold)).lineLimit(2)
-                Text(episode.podcastName).font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
+    private func play(_ episode: Episode) {
+        if episode.isAudiobook {
+            coordinator.playAudiobook(episode: episode)
+        } else {
+            coordinator.play(episode: episode)
         }
+        dismiss()
+    }
+
+    private func row(for episode: Episode, onSelect: @escaping () -> Void) -> some View {
+        Button(action: onSelect) {
+            HStack(spacing: 12) {
+                RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 8, targetSize: 44)
+                    .frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(episode.title).font(.subheadline.weight(.semibold)).lineLimit(2)
+                    Text(episode.podcastName).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
         .listRowBackground(Color.podimoCard)
     }
 }

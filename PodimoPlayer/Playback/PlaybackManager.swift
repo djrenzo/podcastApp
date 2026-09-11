@@ -376,6 +376,25 @@ final class PlaybackManager: @unchecked Sendable {
             }
             return .success
         }
+        // Surfaced as the lock screen / Control Center "next" button: same
+        // "mark done and advance" action as the checkmark in Now Playing.
+        center.nextTrackCommand.isEnabled = true
+        center.nextTrackCommand.addTarget { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.markCurrentDoneAndAdvance()
+            }
+            return .success
+        }
+        // Lets the lock screen / Control Center Now Playing widget show the
+        // same speed control as the in-app player.
+        center.changePlaybackRateCommand.supportedPlaybackRates = Self.availableRates.map { NSNumber(value: $0) }
+        center.changePlaybackRateCommand.addTarget { [weak self] event in
+            guard let event = event as? MPChangePlaybackRateCommandEvent else { return .commandFailed }
+            DispatchQueue.main.async {
+                self?.setPlaybackRate(event.playbackRate)
+            }
+            return .success
+        }
     }
 
     private func updateNowPlayingInfo(timeOnly: Bool = false) {
@@ -399,6 +418,7 @@ final class PlaybackManager: @unchecked Sendable {
         info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         info[MPMediaItemPropertyPlaybackDuration] = duration
         info[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? Double(playbackRate) : 0.0
+        info[MPNowPlayingInfoPropertyDefaultPlaybackRate] = Double(playbackRate)
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 

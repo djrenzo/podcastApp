@@ -8,7 +8,7 @@ struct MiniPlayerBar: View {
         if let episode = playback.currentEpisode {
             Button(action: onTap) {
                 HStack(spacing: 12) {
-                    RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 10)
+                    RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 10, targetSize: 44)
                         .frame(width: 44, height: 44)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(episode.title).font(.subheadline.weight(.semibold)).lineLimit(1).foregroundStyle(.white)
