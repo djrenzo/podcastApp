@@ -103,10 +103,7 @@ struct PodcastDetailView: View {
             }
             await load()
             if podcast.externalFeedURL == nil {
-                await refreshFollowState()
-                if podcast.authorName == nil || podcast.description == nil {
-                    resolvedPodcast = try? await PodimoAPI.shared.getPodcast(podcastId: podcast.id)
-                }
+                await refreshPodcastDetails()
             }
         }
         .sheet(isPresented: $showFullDescription) {
@@ -225,10 +222,14 @@ struct PodcastDetailView: View {
         }
     }
 
-    private func refreshFollowState() async {
-        guard !isTogglingFollow else { return }
-        if let state = try? await PodimoAPI.shared.getPodcastFollowState(podcastId: podcast.id) {
-            isFollowing = state
+    /// One combined request refreshes follow state and backfills author/
+    /// description (when missing) in a single round trip, rather than the
+    /// two separate queries this used to be.
+    private func refreshPodcastDetails() async {
+        guard let fetched = try? await PodimoAPI.shared.getPodcast(podcastId: podcast.id) else { return }
+        resolvedPodcast = fetched
+        if !isTogglingFollow {
+            isFollowing = fetched.isFollowing ?? isFollowing
         }
     }
 

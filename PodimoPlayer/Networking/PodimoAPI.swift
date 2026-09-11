@@ -128,26 +128,13 @@ final class PodimoAPI: @unchecked Sendable {
         return (podcasts, audiobooks)
     }
 
-    /// Whether the user currently follows (i.e. has in their library) this
-    /// podcast — the library query carries this too, but a podcast reached
-    /// from elsewhere (e.g. an episode's "Podcast" action) won't have it.
-    func getPodcastFollowState(podcastId: String) async throws -> Bool {
-        let data = try await perform(
-            operationName: "PodcastResultsQuery",
-            query: GraphQLQueries.podcastFollowState,
-            variables: ["id": podcastId]
-        )
-        let podcast = data["podcastById"] as? [String: Any]
-        let userStats = podcast?["userStats"] as? [String: Any]
-        return userStats?["isFollowing"] as? Bool ?? false
-    }
-
-    /// Full podcast details by ID — used to backfill author/description on a
-    /// `Podcast` reconstructed from just an episode's denormalized fields
-    /// (neither of which carries the podcast's own description).
+    /// Full podcast details by ID — id, title, author, images, description,
+    /// and follow state (`Podcast.isFollowing`) all in one request. Used both
+    /// to refresh follow state and to backfill author/description on a
+    /// `Podcast` reconstructed from just an episode's denormalized fields.
     func getPodcast(podcastId: String) async throws -> Podcast? {
         let data = try await perform(
-            operationName: "PodcastDetailsQuery",
+            operationName: "PodcastResultsQuery",
             query: GraphQLQueries.podcastDetails,
             variables: ["id": podcastId]
         )

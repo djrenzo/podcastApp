@@ -57,10 +57,20 @@ struct NowPlayingView: View {
 
     private func openDetail() {
         guard let episode = playback.currentEpisode else { return }
-        if episode.isAudiobook {
-            navPath.append(AudiobookLink(id: episode.id, title: episode.title, imageUrl: episode.imageUrl))
-        } else if let podcast = minimalPodcast(for: episode) {
-            navPath.append(podcast)
+        // Animating this push (the default) briefly shows the destination
+        // laid out for the wrong nav bar height — Now Playing's own root
+        // hides its bar, PodcastDetailView/AudiobookDetailView show theirs —
+        // reading as the destination rendering too high, then jumping down
+        // once the transition settles. Snapping straight to the final
+        // layout avoids that in-between frame entirely.
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            if episode.isAudiobook {
+                navPath.append(AudiobookLink(id: episode.id, title: episode.title, imageUrl: episode.imageUrl))
+            } else if let podcast = minimalPodcast(for: episode) {
+                navPath.append(podcast)
+            }
         }
     }
 

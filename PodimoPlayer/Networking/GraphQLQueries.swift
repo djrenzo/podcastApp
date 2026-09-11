@@ -415,41 +415,28 @@ enum GraphQLQueries {
     }
     """
 
-    static let podcastFollowState = """
+    /// Fetches a podcast's full details by ID — id, title, author, images,
+    /// description, and follow state all in one request. Replaces what used
+    /// to be two separate queries (a follow-state-only one, plus a details
+    /// one); the real app's own client already fetches all of this together.
+    static let podcastDetails = """
     query PodcastResultsQuery($id: String!) {
       podcastById(podcastId: $id) {
-        id
-        userStats {
-          isFollowing
-          __typename
-        }
-        __typename
-      }
-    }
-    """
-
-    /// Fetches a podcast's full details by ID — used to backfill author/
-    /// description when a `Podcast` was reconstructed from just an episode's
-    /// denormalized podcastId/podcastName (e.g. Now Playing's info button, or
-    /// Keep Listening's "Podcast" context menu action), neither of which
-    /// carries those fields.
-    static let podcastDetails = """
-    query PodcastDetailsQuery($id: String!) {
-      podcastById(podcastId: $id) {
         ...PodcastBaseFragment
+        description
         __typename
       }
     }
 
     fragment PodcastBaseFragment on Podcast {
-        authorName
-        description
-        hasVideo
         id
-        podcastType
         title
+        authorName
+        podcastType
+        hasVideo
         ...PodcastUserStatsFragment
         ...PodcastImagesFragment
+        ...PodcastFeaturesStatusFragment
         __typename
     }
 
@@ -466,6 +453,14 @@ enum GraphQLQueries {
             coverImageUrl
             artworkOutstretchedUrl
             artworkPremiumUrl
+            __typename
+        }
+        __typename
+    }
+
+    fragment PodcastFeaturesStatusFragment on Podcast {
+        featuresStatus {
+            badge
             __typename
         }
         __typename
