@@ -32,7 +32,6 @@ final class ListeningProgressStore: @unchecked Sendable {
     private let key = "podimo_listening_progress"
     private let completedKey = "podimo_completed_episodes"
     private let notCompletedKey = "podimo_not_completed_episodes"
-    private let minProgress = 0.02
     private let maxProgress = 0.95
 
     private(set) var records: [ListeningProgressRecord] = []
@@ -56,9 +55,12 @@ final class ListeningProgressStore: @unchecked Sendable {
         loadNotCompleted()
     }
 
+    /// No lower bound on progress — an episode/audiobook shows up here the
+    /// instant it starts playing (see `beginPlayback`), not once it crosses
+    /// some minimum listened threshold.
     var inProgress: [ListeningProgressRecord] {
         records
-            .filter { $0.progress >= minProgress && $0.progress < maxProgress }
+            .filter { $0.progress < maxProgress }
             .sorted { $0.lastListenDatetime > $1.lastListenDatetime }
     }
 
@@ -103,7 +105,6 @@ final class ListeningProgressStore: @unchecked Sendable {
             remove(episodeId: episode.id)
             return
         }
-        guard progress >= minProgress else { return }
         // Actively re-listening (e.g. restarted from the beginning) undoes a
         // prior completion mark — in either direction.
         unmarkCompleted(episodeId: episode.id)
@@ -148,7 +149,7 @@ final class ListeningProgressStore: @unchecked Sendable {
             hasVideo: episode.hasVideo,
             duration: episode.duration ?? 0,
             listenTime: 0,
-            progress: minProgress,
+            progress: 0,
             lastListenDatetime: Date(),
             chapters: episode.chapters,
             isAudiobook: episode.isAudiobook,
@@ -158,6 +159,40 @@ final class ListeningProgressStore: @unchecked Sendable {
             externalAudioURLString: episode.externalAudioURLString
         )
         records.removeAll { $0.episodeId == episode.id }
+        records.append(record)
+        persist()
+    }
+
+    /// Called the moment an episode/audiobook actually starts playing, so it
+    /// shows up in Keep Listening immediately — no minimum-progress threshold
+    /// to cross first, and regardless of the current maxProgress cutoff (that
+    /// only matters for the periodic `update()` calls that follow). If it's
+    /// already being tracked — e.g. resuming something already in Keep
+    /// Listening — its existing progress is left untouched; this only
+    /// guarantees *a* record exists, it never resets one, so resuming never
+    /// visibly jumps the row back to the start.
+    func beginPlayback(_ episode: Episode) {
+        unmarkCompleted(episodeId: episode.id)
+        unmarkNotCompleted(episodeId: episode.id)
+        guard records.first(where: { $0.episodeId == episode.id }) == nil else { return }
+        let record = ListeningProgressRecord(
+            episodeId: episode.id,
+            podcastId: episode.podcastId,
+            podcastName: episode.podcastName,
+            title: episode.title,
+            imageUrl: episode.imageUrl,
+            hasVideo: episode.hasVideo,
+            duration: episode.duration ?? 0,
+            listenTime: episode.userProgress?.listenTime ?? 0,
+            progress: episode.userProgress?.progress ?? 0,
+            lastListenDatetime: Date(),
+            chapters: episode.chapters,
+            isAudiobook: episode.isAudiobook,
+            description: episode.description,
+            publishDatetime: episode.publishDatetime,
+            isMarkedAsPlayed: episode.isMarkedAsPlayed,
+            externalAudioURLString: episode.externalAudioURLString
+        )
         records.append(record)
         persist()
     }

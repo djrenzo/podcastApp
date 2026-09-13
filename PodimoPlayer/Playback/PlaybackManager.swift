@@ -153,6 +153,9 @@ final class PlaybackManager: @unchecked Sendable {
         isVideoActive = false
         errorMessage = nil
         artwork = nil
+        // Puts it in Keep Listening right away, rather than waiting for
+        // enough real playback progress to accumulate.
+        ListeningProgressStore.shared.beginPlayback(episode)
         loadArtwork(for: episode)
         loadItem(url: audioURL, resumeTime: episode.resumeTime ?? 0, autoplay: true)
     }

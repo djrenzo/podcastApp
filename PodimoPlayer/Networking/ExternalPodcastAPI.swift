@@ -108,7 +108,7 @@ private final class RSSFeedParser: NSObject, XMLParserDelegate {
         parser.delegate = self
         guard parser.parse() else { throw ExternalPodcastError.parsingFailed }
         let episodes = items.enumerated().map { index, dict in
-            makeEpisode(from: dict, index: index, feedURL: feedURL, podcastTitle: feedTitle ?? "")
+            makeEpisode(from: dict, index: index, feedURL: feedURL, podcastTitle: feedTitle ?? "", podcastImageUrl: feedImageUrl)
         }
         return ParsedRSSFeed(title: feedTitle, description: feedDescription, imageUrl: feedImageUrl, author: feedAuthor, episodes: episodes)
     }
@@ -169,7 +169,7 @@ private final class RSSFeedParser: NSObject, XMLParserDelegate {
         return parts.reduce(0) { $0 * 60 + $1 }
     }
 
-    private func makeEpisode(from dict: [String: String], index: Int, feedURL: String, podcastTitle: String) -> Episode {
+    private func makeEpisode(from dict: [String: String], index: Int, feedURL: String, podcastTitle: String, podcastImageUrl: String?) -> Episode {
         let id = dict["guid"].flatMap { $0.isEmpty ? nil : $0 }
             ?? dict["enclosureUrl"].flatMap { $0.isEmpty ? nil : $0 }
             ?? "\(feedURL)#\(index)"
@@ -179,6 +179,11 @@ private final class RSSFeedParser: NSObject, XMLParserDelegate {
             publishDatetime = ISO8601DateFormatter().string(from: date)
         }
 
+        // Not every item in the wild carries its own <itunes:image> — fall
+        // back to the feed's own artwork rather than leaving the episode
+        // with no image at all.
+        let imageUrl = dict["imageUrl"] ?? podcastImageUrl
+
         var episodeDict: [String: Any] = [
             "id": id,
             "podcastId": feedURL,
@@ -186,7 +191,7 @@ private final class RSSFeedParser: NSObject, XMLParserDelegate {
             "title": dict["title"] ?? "Untitled Episode",
             "description": dict["description"] as Any,
             "publishDatetime": publishDatetime as Any,
-            "imageUrl": dict["imageUrl"] as Any,
+            "imageUrl": imageUrl as Any,
             "hasVideo": false,
             "isMarkedAsPlayed": false
         ]

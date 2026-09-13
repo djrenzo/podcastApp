@@ -7,6 +7,34 @@ import ImageIO
 private nonisolated(unsafe) let artworkResultCache = NSCache<NSString, UIImage>()
 private nonisolated(unsafe) let artworkContentCache = NSCache<NSString, UIImage>()
 
+/// Raw artwork bytes cached to disk per source URL — reused no matter what
+/// pixel size is later asked for, and (unlike the two NSCaches above) it
+/// survives app relaunches and backgrounding. That's what actually lets a
+/// downloaded episode/audiobook's artwork keep showing with no network at
+/// all: the audio itself is saved locally, but its artwork is still just a
+/// remote URL — this is what makes that URL resolve from disk instead of
+/// silently failing offline. `.cachesDirectory` rather than Documents, since
+/// this is reconstructable data the OS is free to purge under storage pressure.
+private let artworkDiskCacheDirectory: URL = {
+    let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("ArtworkCache", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir
+}()
+
+private func artworkDiskFileURL(for url: URL) -> URL {
+    let hashed = Insecure.MD5.hash(data: Data(url.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
+    return artworkDiskCacheDirectory.appendingPathComponent(hashed)
+}
+
+private func readArtworkDiskData(for url: URL) -> Data? {
+    try? Data(contentsOf: artworkDiskFileURL(for: url))
+}
+
+private func writeArtworkDiskData(_ data: Data, for url: URL) {
+    try? data.write(to: artworkDiskFileURL(for: url), options: .atomic)
+}
+
 /// Loads, downsamples, and caches remote artwork so scrolling long episode
 /// lists doesn't decode dozens of full-resolution images at once — and so
 /// the same artwork (whether re-requested via the same URL, or a different
@@ -52,7 +80,15 @@ private final class ArtworkLoader: @unchecked Sendable {
             return existing
         }
         let task = Task<UIImage?, Never> {
-            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+            let data: Data
+            if let onDisk = readArtworkDiskData(for: url) {
+                data = onDisk
+            } else if let (fetched, _) = try? await URLSession.shared.data(from: url) {
+                data = fetched
+                writeArtworkDiskData(fetched, for: url)
+            } else {
+                return nil
+            }
 
             let contentKey = "\(Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined())|\(pixelSize.map { Int($0) } ?? 0)" as NSString
             if let reused = artworkContentCache.object(forKey: contentKey) {

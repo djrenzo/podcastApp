@@ -3,6 +3,8 @@ import SwiftUI
 struct QueueView: View {
     @State private var queueManager = EpisodeQueueManager.shared
     @State private var coordinator = PlaybackCoordinator.shared
+    @State private var downloads = DownloadManager.shared
+    @State private var network = NetworkMonitor.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -70,7 +72,12 @@ struct QueueView: View {
     }
 
     private func row(for episode: Episode, onSelect: @escaping () -> Void) -> some View {
-        Button(action: onSelect) {
+        let isDownloaded = downloads.record(for: episode.id) != nil
+        // Offline, anything not already downloaded has no way to actually
+        // start playing — gray it out and block the tap instead of letting
+        // it fail silently once selected.
+        let isUnavailable = !network.isConnected && !isDownloaded
+        return Button(action: onSelect) {
             HStack(spacing: 12) {
                 RemoteArtwork(urlString: episode.imageUrl, cornerRadius: 8, targetSize: 44)
                     .frame(width: 44, height: 44)
@@ -79,9 +86,15 @@ struct QueueView: View {
                     Text(episode.podcastName).font(.caption).foregroundStyle(.secondary)
                 }
                 Spacer()
+                if isDownloaded {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.podimoMint)
+                }
             }
+            .opacity(isUnavailable ? 0.4 : 1)
         }
         .buttonStyle(.plain)
+        .disabled(isUnavailable)
         .listRowBackground(Color.podimoCard)
     }
 }
